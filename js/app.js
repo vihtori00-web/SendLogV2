@@ -832,6 +832,7 @@
             renderSessionList();
             saveActiveSession();
             checkLiveFatigueAlert();
+            checkIntraSessionAdaptation();
             btnSubmit.innerText = `+${points} ADDED`;
             btnSubmit.classList.add('bg-emerald-400', 'text-black', 'border-emerald-400');
 
@@ -910,12 +911,120 @@
                 renderSessionList();
                 saveActiveSession();
                 checkLiveFatigueAlert();
+                checkIntraSessionAdaptation();
             }
         }
 
         // =============================================
         // COACH-GUIDED RECOMMENDATIONS IMPLEMENTATION
         // =============================================
+
+        let dismissedCoachAdaptationIds = new Set();
+
+        function checkIntraSessionAdaptation() {
+            if (!trainingActive || !coachPlan || !coachPlan.phases || !coachPlan.phases[coachPhaseIndex]) {
+                hideCoachAdaptiveBanner();
+                return;
+            }
+
+            if (typeof Planner === 'undefined' || typeof Planner.evaluateIntraSessionAdaptation !== 'function') {
+                hideCoachAdaptiveBanner();
+                return;
+            }
+
+            const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan);
+            const banner = document.getElementById('coachAdaptiveBanner');
+            if (!banner) return;
+
+            if (!adaptation || dismissedCoachAdaptationIds.has(adaptation.id)) {
+                banner.classList.add('hidden');
+                return;
+            }
+
+            // Populate banner
+            const iconEl = document.getElementById('coachAdaptiveIcon');
+            const titleEl = document.getElementById('coachAdaptiveTitle');
+            const msgEl = document.getElementById('coachAdaptiveMessage');
+            const actionsEl = document.getElementById('coachAdaptiveActions');
+
+            if (titleEl) titleEl.innerText = adaptation.title;
+            if (msgEl) msgEl.innerText = adaptation.message;
+            if (iconEl) {
+                iconEl.innerText = adaptation.badgeColor === 'emerald' ? '🔥' : '⚠️';
+            }
+
+            // Color theme
+            if (adaptation.badgeColor === 'emerald') {
+                banner.className = 'bg-emerald-950/80 border border-emerald-500/50 rounded-xl p-2.5 shadow-md flex flex-col gap-1.5 transition-all';
+                if (titleEl) titleEl.className = 'text-[11px] font-black text-emerald-400 truncate';
+            } else {
+                banner.className = 'bg-amber-950/80 border border-amber-500/50 rounded-xl p-2.5 shadow-md flex flex-col gap-1.5 transition-all';
+                if (titleEl) titleEl.className = 'text-[11px] font-black text-amber-400 truncate';
+            }
+
+            if (actionsEl && adaptation.actions) {
+                actionsEl.innerHTML = adaptation.actions.map(act => `
+                    <button onclick="handleCoachAdaptiveAction('${act.action}', '${adaptation.id}', ${act.newGradeIdx !== undefined ? act.newGradeIdx : 'null'}, ${act.restSeconds || 0})"
+                        class="flex-1 py-1.5 px-2 rounded-lg ${
+                            act.primary 
+                            ? (adaptation.badgeColor === 'emerald' ? 'bg-emerald-500 text-black font-black' : 'bg-amber-500 text-black font-black')
+                            : 'bg-neutral-800 text-neutral-300 font-bold border border-neutral-700'
+                        } text-[10px] uppercase tracking-wider active:scale-95 transition-all truncate shadow-sm">
+                        ${act.label}
+                    </button>
+                `).join('');
+            }
+
+            banner.classList.remove('hidden');
+        }
+
+        function hideCoachAdaptiveBanner() {
+            const banner = document.getElementById('coachAdaptiveBanner');
+            if (banner) banner.classList.add('hidden');
+        }
+
+        function dismissCoachAdaptiveBanner() {
+            if (typeof Planner !== 'undefined' && Planner.evaluateIntraSessionAdaptation) {
+                const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan);
+                if (adaptation) dismissedCoachAdaptationIds.add(adaptation.id);
+            }
+            hideCoachAdaptiveBanner();
+        }
+
+        function handleCoachAdaptiveAction(action, adaptationId, newGradeIdx, restSeconds) {
+            if (adaptationId) dismissedCoachAdaptationIds.add(adaptationId);
+            hideCoachAdaptiveBanner();
+
+            if (action === 'bump_grade' || action === 'drop_grade') {
+                if (newGradeIdx !== null && newGradeIdx !== undefined && newGradeIdx >= 0 && newGradeIdx < fontGrades.length) {
+                    if ('vibrate' in navigator) navigator.vibrate([40, 40, 40]);
+                    if (action === 'bump_grade' && typeof confetti === 'function') {
+                        confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b'] });
+                    }
+                    if (coachPlan && coachPlan.phases && coachPlan.phases[coachPhaseIndex]) {
+                        coachPlan.phases[coachPhaseIndex].targetGradeIdx = newGradeIdx;
+                        coachPlan.phases[coachPhaseIndex].targetGradeStr = fontGrades[newGradeIdx];
+                    }
+                    currentGradeIndex = newGradeIdx;
+                    const elGrade = document.getElementById('displayGrade');
+                    if (elGrade) elGrade.innerText = fontGrades[currentGradeIndex];
+
+                    updateTrainingHUD();
+                    updateTrainingSessionBanner();
+                    saveActiveSession();
+                }
+            } else if (action === 'advance_phase') {
+                advanceCoachedPhase();
+            } else if (action === 'add_rest') {
+                if ('vibrate' in navigator) navigator.vibrate(20);
+                coachRestRemaining = (coachRestRemaining || 0) + (restSeconds || 120);
+                updateCoachRestTimerDisplay();
+                if (!coachRestTimerInterval) toggleCoachRestTimer();
+            }
+        }
+
+        window.handleCoachAdaptiveAction = handleCoachAdaptiveAction;
+        window.dismissCoachAdaptiveBanner = dismissCoachAdaptiveBanner;
 
         function startCoachedSession(phaseIdx = 0) {
             if ('vibrate' in navigator) navigator.vibrate([30, 50, 30]);
@@ -960,6 +1069,8 @@
             if (!coachPlan || !coachPlan.phases || !coachPlan.phases[index]) return;
             const phase = coachPlan.phases[index];
 
+            hideCoachAdaptiveBanner();
+
             // Set current logger grade to phase target grade if valid
             if (phase.targetGradeIdx !== null && phase.targetGradeIdx !== undefined) {
                 currentGradeIndex = phase.targetGradeIdx;
@@ -980,6 +1091,8 @@
             }
             coachRestRemaining = phase.restSeconds || 120;
             updateCoachRestTimerDisplay();
+
+            checkIntraSessionAdaptation();
         }
 
         function applyCoachTargetGrade() {
@@ -1123,6 +1236,9 @@
 
             trainingActive = false;
             trainingState = 'climb';
+
+            hideCoachAdaptiveBanner();
+            dismissedCoachAdaptationIds.clear();
 
             updateTrainingHUD();
             updateTrainingSessionBanner();
