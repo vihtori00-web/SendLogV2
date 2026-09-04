@@ -139,57 +139,36 @@
 
             <section id="page-log" class="p-4 flex flex-col space-y-3 w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
 
-                <!-- Coach-Guided Session HUD (shown when coach workout is active) -->
-                <div id="trainingHUD" class="hidden bg-neutral-900/95 backdrop-blur-md border border-emerald-500/40 rounded-[2rem] overflow-hidden shadow-2xl shrink-0 transition-all">
+                <!-- Coach-Guided Session HUD (Compact & Ergonomic) -->
+                <div id="trainingHUD" class="hidden bg-neutral-900/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl overflow-hidden shadow-xl shrink-0 p-3 transition-all">
                     <!-- Active Coach Phase View -->
-                    <div id="coachHUDActive" class="p-4 flex flex-col space-y-3">
-                        <!-- Top bar: Badge, Phase indicator, Exit button -->
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider">🎯 Coach Phase</span>
-                                <span id="coachPhaseIndicator" class="text-[10px] font-mono font-bold text-neutral-400">1 of 4</span>
+                    <div id="coachHUDActive" class="flex flex-col space-y-2">
+                        <!-- Row 1: Badge + Phase Title + Target Grade Pill + Exit -->
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider shrink-0">🎯 Phase <span id="coachPhaseIndicator">1 of 4</span></span>
+                                <h4 id="coachPhaseTitle" class="text-xs font-black text-white truncate">Warmup Pyramid</h4>
+                                <span id="coachPhaseDuration" class="text-[9px] font-bold text-neutral-400 uppercase shrink-0">25m</span>
                             </div>
-                            <div class="flex items-center gap-1">
-                                <button onclick="forfeitTraining()" class="text-[9px] font-black uppercase tracking-wider text-neutral-500 hover:text-red-400 active:scale-95 transition-all px-2.5 py-1 rounded-lg bg-neutral-800/80">Exit</button>
-                            </div>
-                        </div>
-
-                        <!-- Phase Progress Indicator -->
-                        <div id="coachPhaseDots" class="flex gap-1.5 w-full"></div>
-
-                        <!-- Main Phase Card: Title + Target Grade -->
-                        <div class="flex items-start justify-between gap-3 bg-neutral-950/70 rounded-2xl p-3 border border-neutral-800/80">
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2 mb-0.5">
-                                    <h4 id="coachPhaseTitle" class="text-sm font-black text-white truncate">Warmup Pyramid</h4>
-                                    <span id="coachPhaseDuration" class="text-[9px] font-bold text-neutral-400 uppercase">25m</span>
-                                </div>
-                                <p id="coachPhaseDesc" class="text-[11px] text-neutral-300 leading-snug">Build gradually from 4 to 6A. Focus on silent feet.</p>
-                            </div>
-                            <div class="text-right shrink-0 flex flex-col items-end">
-                                <span class="text-[8px] font-black uppercase tracking-wider text-neutral-500">Target</span>
-                                <button onclick="applyCoachTargetGrade()" id="coachTargetGradeBtn" title="Tap to set grade in logger" class="flex items-center gap-1 mt-0.5 px-2.5 py-1 rounded-xl bg-orange-500/20 border border-orange-500/40 text-orange-400 active:scale-95 transition-all">
-                                    <span id="coachTargetGrade" class="text-lg font-black leading-none">6A</span>
-                                    <span class="text-[8px] font-bold text-orange-300 uppercase">Set</span>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <button onclick="applyCoachTargetGrade()" id="coachTargetGradeBtn" title="Tap to snap logger to target" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/20 border border-orange-500/40 text-orange-400 active:scale-95 transition-all text-xs font-black">
+                                    <span class="text-[8px] uppercase text-orange-300 font-bold">Target</span>
+                                    <span id="coachTargetGrade">6A</span>
                                 </button>
+                                <button onclick="forfeitTraining()" class="text-[10px] font-bold text-neutral-500 hover:text-red-400 active:scale-95 px-2 py-1 rounded-md bg-neutral-800">✕</button>
                             </div>
                         </div>
 
-                        <!-- Recommended Movement Tags -->
-                        <div id="coachFocusTagsContainer" class="flex items-center gap-1.5 flex-wrap">
-                            <span class="text-[8px] font-black uppercase tracking-widest text-neutral-500">Focus:</span>
-                            <div id="coachFocusTags" class="flex items-center gap-1.5 flex-wrap"></div>
-                        </div>
+                        <!-- Row 2: Phase Instructions -->
+                        <p id="coachPhaseDesc" class="text-[11px] text-neutral-300 leading-snug"></p>
 
-                        <!-- Rest Timer & Phase Navigation Controls -->
+                        <!-- Row 3: Action Buttons (Rest Timer + Next Phase) -->
                         <div class="flex items-center gap-2 pt-1 border-t border-neutral-800/80">
-                            <!-- Rest Timer Button -->
-                            <button id="coachRestTimerBtn" onclick="toggleCoachRestTimer()" class="flex-1 py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all border border-neutral-700">
+                            <button id="coachRestTimerBtn" onclick="toggleCoachRestTimer()" class="flex-1 py-2 px-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all border border-neutral-700">
                                 <span id="coachRestTimerIcon">⏱️</span>
-                                <span id="coachRestTimerLabel">Rest 2:00</span>
+                                <span id="coachRestTimerLabel">Rest 1:30</span>
                             </button>
-                            <!-- Next Phase Button -->
-                            <button id="coachNextPhaseBtn" onclick="advanceCoachedPhase()" class="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition-all">
+                            <button id="coachNextPhaseBtn" onclick="advanceCoachedPhase()" class="flex-1 py-2 px-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all">
                                 <span id="coachNextPhaseBtnLabel">Next Phase</span>
                                 <span>⏭️</span>
                             </button>
@@ -197,69 +176,73 @@
                     </div>
 
                     <!-- Workout Complete State -->
-                    <div id="coachHUDComplete" class="hidden p-5 text-center space-y-3">
-                        <div class="text-3xl">🎉</div>
-                        <h4 class="text-base font-black text-emerald-400">Coach Workout Complete!</h4>
-                        <p class="text-xs text-neutral-400">Awesome execution. You completed all prescribed phases. Continue logging freely or wrap up your session.</p>
-                        <button onclick="endTraining()" class="w-full py-3 rounded-2xl bg-neutral-800 hover:bg-neutral-700 text-white font-black uppercase tracking-wider text-xs active:scale-95 transition-all border border-neutral-700">Return to Free Log</button>
+                    <div id="coachHUDComplete" class="hidden p-4 text-center space-y-2">
+                        <div class="text-2xl">🎉</div>
+                        <h4 class="text-sm font-black text-emerald-400">Coach Workout Complete!</h4>
+                        <p class="text-[11px] text-neutral-400">Great execution. You completed all prescribed phases. Continue logging freely or wrap up.</p>
+                        <button onclick="endTraining()" class="w-full py-2.5 rounded-xl bg-neutral-800 text-white font-black uppercase tracking-wider text-xs active:scale-95 transition-all border border-neutral-700">Return to Free Log</button>
                     </div>
 
                     <!-- Hidden legacy stubs for safe fallback -->
+                    <div id="coachPhaseDots" class="hidden"></div>
+                    <div id="coachFocusTagsContainer" class="hidden"><div id="coachFocusTags"></div></div>
                     <div id="trainingHUDPrepare" class="hidden"></div>
                     <div id="trainingHUDClimb" class="hidden"></div>
                     <div id="trainingHUDTimeout" class="hidden"><span id="trainingPeakDisplay"></span></div>
                 </div>
 
-                <!-- Grade Control (Extreme Resiliency) -->
-                <div id="gradeControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-3 relative select-none touch-manipulation shadow-md">
+                <!-- Grade Control (Resilient & Non-Squishing) -->
+                <div id="gradeControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-2 relative select-none touch-manipulation shadow-md shrink-0">
                     <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Font Grade</p>
-                    <div class="flex items-center justify-between w-full px-6 min-h-[clamp(3.5rem,10vh,5rem)]">
+                    <div class="flex items-center justify-between w-full px-6 min-h-[4rem]">
                         <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
                             <span class="text-4xl font-black">&minus;</span>
                         </button>
-                        <span id="displayGrade" class="text-[clamp(2.5rem,12vw,4rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">6A</span>
+                        <span id="displayGrade" class="text-[clamp(2.5rem,10vw,3.5rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">6A</span>
                         <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-12 h-12 flex items-center justify-end text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
                             <span class="text-4xl font-black">+</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Attempts Control (Extreme Resiliency) -->
-                <div id="attemptsControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-3 relative select-none touch-manipulation shadow-md">
+                <!-- Attempts Control (Resilient & Non-Squishing) -->
+                <div id="attemptsControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-2 relative select-none touch-manipulation shadow-md shrink-0">
                     <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Attempts</p>
-                    <div class="flex items-center justify-between w-full px-6 min-h-[clamp(3.5rem,10vh,5rem)]">
+                    <div class="flex items-center justify-between w-full px-6 min-h-[3.5rem]">
                         <button onclick="adjTries(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
                             <span class="text-4xl font-black">&minus;</span>
                         </button>
-                        <span id="displayTries" class="text-[clamp(2.5rem,12vw,3.5rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">1</span>
+                        <span id="displayTries" class="text-[clamp(2rem,9vw,3rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">1</span>
                         <button onclick="adjTries(1)" class="w-12 h-12 flex items-center justify-end text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
                             <span class="text-4xl font-black">+</span>
                         </button>
                     </div>
                 </div>
 
-                <div id="statusButtonsContainer" class="flex gap-3 shrink-0 h-[clamp(4rem,12vh,5.5rem)]">
+                <!-- Status Buttons (Topped / Flash) -->
+                <div id="statusButtonsContainer" class="flex gap-3 shrink-0 h-[3.5rem]">
                     <button id="btnTop" onclick="toggleTop()"
-                        class="flex-1 rounded-[1.8rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback">
+                        class="flex-1 rounded-[1.5rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback">
                         Topped
                     </button>
                     <button id="btnFlash" onclick="toggleFlash()"
-                        class="flex-1 rounded-[1.8rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback transition-transform">
+                        class="flex-1 rounded-[1.5rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback transition-transform">
                         Flash
                     </button>
                 </div>
 
+                <!-- Style Tags Container -->
                 <div id="tagContainer" class="flex flex-wrap justify-center gap-2 mt-1 shrink-0 px-2 lg:px-4">
                     <!-- Dynamic style tags go here -->
                 </div>
 
-                <div id="submitButtonContainer" class="mt-auto pt-2 shrink-0">
+                <!-- Log Climb Button Container (Never Squished) -->
+                <div id="submitButtonContainer" class="pt-2 pb-24 shrink-0">
                     <button onclick="logClimb()" id="mainAddButton"
-                        class="w-full h-[clamp(4.5rem,14vh,6.5rem)] rounded-[2.5rem] bg-emerald-500 text-black font-black uppercase tracking-[0.3em] text-2xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none">
+                        class="w-full h-[4.5rem] rounded-[2rem] bg-emerald-500 text-black font-black uppercase tracking-[0.3em] text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none">
                         Log Climb
                     </button>
-                </div>
-            </section>
+                </div></section>
 
             <section id="page-session" class="p-5 flex flex-col w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
                 <div class="flex justify-between items-center bg-neutral-900 rounded-[2rem] p-5 border border-neutral-800 shrink-0 mb-4 shadow-sm">
