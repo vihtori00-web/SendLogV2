@@ -221,9 +221,9 @@
                 </div>
 
                 <!-- Attempts Control (Resilient & Non-Squishing) -->
-                <div id="attemptsControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-2 relative select-none touch-manipulation shadow-md shrink-0">
+                <div id="attemptsControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center p-3 relative select-none touch-manipulation shadow-md shrink-0">
                     <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Attempts</p>
-                    <div class="flex items-center justify-between w-full px-6 min-h-[3.5rem]">
+                    <div class="flex items-center justify-between w-full px-6 min-h-[3rem]">
                         <button onclick="adjTries(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
                             <span class="text-4xl font-black">&minus;</span>
                         </button>
@@ -232,6 +232,12 @@
                             <span class="text-4xl font-black">+</span>
                         </button>
                     </div>
+                    <!-- Quick Burn Action -->
+                    <button id="btnQuickBurn" onclick="quickRecordBurn()" class="w-full mt-1.5 py-2 px-3 rounded-xl bg-neutral-800/90 hover:bg-neutral-800 text-neutral-200 active:scale-95 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 border border-neutral-700/80 transition-all shadow-sm">
+                        <span>💥</span>
+                        <span>+1 Burn & Start Rest</span>
+                        <span>⏱️</span>
+                    </button>
                 </div>
 
                 <!-- Status Buttons (Topped / Flash) -->
