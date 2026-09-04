@@ -137,7 +137,7 @@
 
         <main id="mainContainer" class="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory pb-24 relative">
 
-            <section id="page-log" class="p-4 flex flex-col space-y-3 w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
+            <section id="page-log" class="p-3.5 sm:p-5 flex flex-col justify-between w-full shrink-0 h-full overflow-y-auto snap-center snap-always relative">
 
                 <!-- Coach-Guided Session HUD (Compact & Ergonomic) -->
                 <div id="trainingHUD" class="hidden bg-neutral-900/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl overflow-hidden shadow-xl shrink-0 p-3 transition-all">
@@ -206,71 +206,74 @@
                     <div id="trainingHUDTimeout" class="hidden"><span id="trainingPeakDisplay"></span></div>
                 </div>
 
-                <!-- Grade & Attempts Dual-Card Grid -->
-                <div class="grid grid-cols-2 gap-3 shrink-0 select-none touch-manipulation">
-                    <!-- Grade Stepper Card -->
-                    <div id="gradeControlContainer" class="bg-neutral-900 rounded-3xl border border-neutral-800 flex flex-col items-center justify-between p-3 relative shadow-md">
-                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">Font Grade</span>
-                        <div class="flex items-center justify-between w-full mt-1">
-                            <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
-                                <span class="text-2xl font-black leading-none">&minus;</span>
-                            </button>
-                            <span id="displayGrade" class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">6A</span>
-                            <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
-                                <span class="text-2xl font-black leading-none">+</span>
-                            </button>
+                <!-- Full-Screen Logging Dashboard -->
+                <div class="flex-1 flex flex-col justify-between gap-3 min-h-0">
+                    <!-- Grade & Attempts Dual-Card Grid -->
+                    <div class="grid grid-cols-2 gap-3 flex-[1.4] min-h-[9.5rem] select-none touch-manipulation">
+                        <!-- Grade Stepper Card -->
+                        <div id="gradeControlContainer" class="bg-neutral-900 rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-between p-3.5 sm:p-4 relative shadow-lg">
+                            <span class="text-neutral-500 text-[10px] font-black uppercase tracking-[0.2em] pointer-events-none">Font Grade</span>
+                            <div class="flex items-center justify-between w-full my-auto">
+                                <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-12 h-12 rounded-2xl bg-neutral-800 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback active:scale-95 shadow-md">
+                                    <span class="text-3xl font-black leading-none">&minus;</span>
+                                </button>
+                                <span id="displayGrade" class="text-4xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md">6A</span>
+                                <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-12 h-12 rounded-2xl bg-neutral-800 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback active:scale-95 shadow-md">
+                                    <span class="text-3xl font-black leading-none">+</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Attempts Stepper Card -->
+                        <div id="attemptsControlContainer" class="bg-neutral-900 rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-between p-3.5 sm:p-4 relative shadow-lg">
+                            <span class="text-neutral-500 text-[10px] font-black uppercase tracking-[0.2em] pointer-events-none">Attempts</span>
+                            <div class="flex items-center justify-between w-full my-auto">
+                                <button onclick="adjTries(-1)" class="w-12 h-12 rounded-2xl bg-neutral-800 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback active:scale-95 shadow-md">
+                                    <span class="text-3xl font-black leading-none">&minus;</span>
+                                </button>
+                                <span id="displayTries" class="text-4xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md">1</span>
+                                <button onclick="adjTries(1)" class="w-12 h-12 rounded-2xl bg-neutral-800 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback active:scale-95 shadow-md">
+                                    <span class="text-3xl font-black leading-none">+</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Attempts Stepper Card -->
-                    <div id="attemptsControlContainer" class="bg-neutral-900 rounded-3xl border border-neutral-800 flex flex-col items-center justify-between p-3 relative shadow-md">
-                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">Attempts</span>
-                        <div class="flex items-center justify-between w-full mt-1">
-                            <button onclick="adjTries(-1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
-                                <span class="text-2xl font-black leading-none">&minus;</span>
-                            </button>
-                            <span id="displayTries" class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">1</span>
-                            <button onclick="adjTries(1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
-                                <span class="text-2xl font-black leading-none">+</span>
-                            </button>
+                    <!-- Actions Row: Send Toggle + Quick Burn & Rest -->
+                    <div class="grid grid-cols-2 gap-3 flex-1 min-h-[4.75rem] max-h-[6.5rem] select-none">
+                        <!-- Send Status Toggle -->
+                        <button id="btnTop" onclick="toggleTop()"
+                            class="rounded-[1.75rem] bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md haptic-feedback h-full">
+                            <span class="text-lg">🧗</span>
+                            <span>Topped?</span>
+                        </button>
+
+                        <!-- Quick Burn Action -->
+                        <button id="btnQuickBurn" onclick="quickRecordBurn()"
+                            class="rounded-[1.75rem] bg-neutral-900 hover:bg-neutral-800/80 border border-neutral-800 active:border-orange-500/40 text-neutral-200 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md haptic-feedback h-full">
+                            <span class="text-lg">⏱️</span>
+                            <span>+1 Burn & Rest</span>
+                        </button>
+                    </div>
+
+                    <!-- Style Tags Container (Compact 4x2 Grid) -->
+                    <div class="shrink-0 flex flex-col gap-1.5 select-none">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-neutral-500 text-[10px] font-black uppercase tracking-[0.2em]">Style Tags</span>
+                        </div>
+                        <div id="tagContainer" class="grid grid-cols-4 gap-2">
+                            <!-- Dynamic style tags injected by renderTags() -->
                         </div>
                     </div>
-                </div>
 
-                <!-- Actions Row: Send Toggle + Quick Burn & Rest -->
-                <div class="grid grid-cols-2 gap-3 shrink-0 h-12 select-none">
-                    <!-- Send Status Toggle -->
-                    <button id="btnTop" onclick="toggleTop()"
-                        class="rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm haptic-feedback">
-                        <span>🧗</span>
-                        <span>Topped?</span>
-                    </button>
-
-                    <!-- Quick Burn Action -->
-                    <button id="btnQuickBurn" onclick="quickRecordBurn()"
-                        class="rounded-2xl bg-neutral-900 hover:bg-neutral-800/80 border border-neutral-800 active:border-orange-500/40 text-neutral-200 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm haptic-feedback">
-                        <span>⏱️</span>
-                        <span>+1 Burn & Rest</span>
-                    </button>
-                </div>
-
-                <!-- Style Tags Container (Compact 4x2 Grid) -->
-                <div class="shrink-0 flex flex-col gap-1.5">
-                    <div class="flex items-center justify-between px-1">
-                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em]">Style Tags</span>
+                    <!-- Log Climb Button Container -->
+                    <div id="submitButtonContainer" class="shrink-0 pt-1 pb-2">
+                        <button onclick="logClimb()" id="mainAddButton"
+                            class="w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-neutral-900 border border-neutral-700 text-neutral-300 font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-xl active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5">
+                            <span>🧗</span>
+                            <span>Log Climb</span>
+                        </button>
                     </div>
-                    <div id="tagContainer" class="grid grid-cols-4 gap-1.5">
-                        <!-- Dynamic style tags injected by renderTags() -->
-                    </div>
-                </div>
-
-                <!-- Log Climb Button Container -->
-                <div id="submitButtonContainer" class="pt-2 pb-4 shrink-0">
-                    <button onclick="logClimb()" id="mainAddButton"
-                        class="w-full h-14 rounded-2xl bg-neutral-900 border border-neutral-700 text-neutral-300 font-black uppercase tracking-[0.2em] text-sm shadow-lg active:scale-95 transition-all outline-none flex items-center justify-center gap-2">
-                        <span>🧗</span>
-                        <span>Log Climb</span>
-                    </button>
                 </div></section>
 
             <section id="page-session" class="p-5 flex flex-col w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">

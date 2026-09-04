@@ -418,8 +418,8 @@
                 if (!container) return;
                 container.innerHTML = tagList.map(tag => `
                     <button onclick="toggleTag('${tag}')" id="tag-${tag}"
-                        class="py-2 px-1 rounded-xl border text-[10px] font-black uppercase tracking-wider text-center transition-all truncate
-                        ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-sm' : 'bg-neutral-900 border-neutral-800/80 text-neutral-500 hover:text-neutral-400'}">
+                        class="py-2.5 sm:py-3 px-1 rounded-2xl border text-xs font-black uppercase tracking-wider text-center transition-all truncate shadow-sm
+                        ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-emerald-500/10' : 'bg-neutral-900 border-neutral-800/80 text-neutral-400 hover:text-neutral-300'}">
                         ${tag}
                     </button>
                 `).join('');
@@ -716,14 +716,14 @@
             const btn = document.getElementById('mainAddButton');
             if (!btn) return;
             if (isFlash) {
-                btn.innerHTML = `<span>⚡</span><span>LOG FLASH (+PTS)</span>`;
-                btn.className = 'w-full h-14 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black uppercase tracking-[0.2em] text-sm shadow-xl shadow-amber-500/20 active:scale-95 transition-all outline-none flex items-center justify-center gap-2';
+                btn.innerHTML = `<span class="text-xl">⚡</span><span>LOG FLASH (+PTS)</span>`;
+                btn.className = 'w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-2xl shadow-amber-500/25 active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5';
             } else if (isTop) {
-                btn.innerHTML = `<span>🧗</span><span>LOG SEND (${tries} ${tries > 1 ? 'TRIES' : 'TRY'})</span>`;
-                btn.className = 'w-full h-14 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.2em] text-sm shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none flex items-center justify-center gap-2';
+                btn.innerHTML = `<span class="text-xl">🧗</span><span>LOG SEND (${tries} ${tries > 1 ? 'TRIES' : 'TRY'})</span>`;
+                btn.className = 'w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-2xl shadow-emerald-500/25 active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5';
             } else {
-                btn.innerHTML = `<span>🛑</span><span>LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})</span>`;
-                btn.className = 'w-full h-14 rounded-2xl bg-neutral-900 border border-neutral-700 text-neutral-300 font-black uppercase tracking-[0.15em] text-xs active:scale-95 transition-all outline-none flex items-center justify-center gap-2';
+                btn.innerHTML = `<span class="text-lg">🛑</span><span>LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})</span>`;
+                btn.className = 'w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-neutral-900 border border-neutral-700 text-neutral-200 font-black uppercase tracking-[0.2em] text-sm sm:text-base active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5';
             }
         }
 
@@ -797,17 +797,17 @@
             const btn = document.getElementById('btnTop');
             if (btn) {
                 if (!isTop) {
-                    btn.className = "rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm haptic-feedback";
-                    btn.innerHTML = `<span>🧗</span><span>Topped?</span>`;
+                    btn.className = "rounded-[1.75rem] bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md haptic-feedback h-full";
+                    btn.innerHTML = `<span class="text-lg">🧗</span><span>Topped?</span>`;
                 } else if (isFlash) {
-                    btn.className = "rounded-2xl bg-gradient-to-r from-amber-500/20 to-yellow-500/15 border border-amber-500/60 text-amber-300 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.15)] haptic-feedback";
-                    btn.innerHTML = `<span>⚡</span><span>Flash!</span><span onclick="toggleFlashOverride(event)" title="Switch to regular send" class="ml-1 px-1.5 py-0.5 rounded-md bg-amber-500/30 text-[9px] text-amber-200 hover:bg-amber-500/50 border border-amber-400/40">Undo</span>`;
+                    btn.className = "rounded-[1.75rem] bg-gradient-to-r from-amber-500/25 to-yellow-500/20 border border-amber-500/60 text-amber-300 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_0_20px_rgba(245,158,11,0.2)] haptic-feedback h-full";
+                    btn.innerHTML = `<span class="text-lg">⚡</span><span>Flash!</span><span onclick="toggleFlashOverride(event)" title="Switch to regular send" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-500/30 text-[10px] text-amber-200 hover:bg-amber-500/50 border border-amber-400/40">Undo</span>`;
                 } else {
-                    btn.className = "rounded-2xl bg-gradient-to-r from-emerald-500/20 to-teal-500/15 border border-emerald-500/60 text-emerald-300 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.15)] haptic-feedback";
+                    btn.className = "rounded-[1.75rem] bg-gradient-to-r from-emerald-500/25 to-teal-500/20 border border-emerald-500/60 text-emerald-300 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.2)] haptic-feedback h-full";
                     if (tries === 1) {
-                        btn.innerHTML = `<span>🧗</span><span>Sent (1 try)</span><span onclick="toggleFlashOverride(event)" title="Mark as flash" class="ml-1 px-1.5 py-0.5 rounded-md bg-neutral-800 text-[9px] text-neutral-300 hover:text-amber-300 border border-neutral-700">⚡ Flash?</span>`;
+                        btn.innerHTML = `<span class="text-lg">🧗</span><span>Sent (1 try)</span><span onclick="toggleFlashOverride(event)" title="Mark as flash" class="ml-1 px-2 py-0.5 rounded-lg bg-neutral-800 text-[10px] text-neutral-300 hover:text-amber-300 border border-neutral-700">⚡ Flash?</span>`;
                     } else {
-                        btn.innerHTML = `<span>🧗</span><span>Sent (${tries} tries)</span>`;
+                        btn.innerHTML = `<span class="text-lg">🧗</span><span>Sent (${tries} tries)</span>`;
                     }
                 }
             }
