@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SendLog - Bouldering Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#10b981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SendLog">
+    <link rel="apple-touch-icon" href="app_icon.png">
+    <style>
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        * {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @keyframes pulse-score {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.03); opacity: 0.9; }
+        }
+        .animate-score-pulse {
+            animation: pulse-score 2s infinite ease-in-out;
+        }
+
+        .tab-transition {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+    </style>
+</head>
+
+<body class="bg-black text-white font-sans antialiased">
+
+    <!-- CHALK-FRIENDLY REST TIMER OVERLAY -->
+    <div id="restOverlay" class="fixed inset-0 z-[60] bg-neutral-950/95 backdrop-blur-sm hidden flex-col items-center justify-center border-t-4 border-emerald-500" style="touch-action: none;">
+        <button onclick="document.getElementById('restOverlay').classList.replace('flex','hidden')" class="absolute top-8 right-8 text-neutral-500 hover:text-white p-4 haptic-feedback">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+        
+        <!-- Timer Display -->
+        <div id="restOverlayTime" class="text-[8rem] font-black text-emerald-400 tracking-tighter leading-none mb-12 font-mono drop-shadow-[0_0_30px_rgba(16,185,129,0.3)]">2:00</div>
+        
+        <!-- Controls -->
+        <div class="flex gap-6 w-full max-w-sm px-6">
+            <button onclick="adjRestTimer(-30)" class="flex-1 bg-neutral-900 border border-neutral-800 text-neutral-400 py-6 text-2xl font-black rounded-3xl haptic-feedback active:bg-neutral-800 transition-all shadow-xl">-30s</button>
+            <button onclick="adjRestTimer(30)" class="flex-1 bg-neutral-900 border border-neutral-800 text-neutral-400 py-6 text-2xl font-black rounded-3xl haptic-feedback active:bg-neutral-800 transition-all shadow-xl">+30s</button>
+        </div>
+        
+        <button onclick="cancelRestTimer()" class="mt-8 text-red-500 border border-red-500/20 bg-red-500/10 px-6 py-3 rounded-full font-bold text-sm haptic-feedback tracking-widest">CANCEL TIMER</button>
+
+        <!-- Finished Message -->
+        <div id="restOverlayFinished" class="absolute inset-0 bg-emerald-500 hidden flex-col items-center justify-center z-10" onclick="this.classList.replace('flex','hidden'); document.getElementById('restOverlay').classList.replace('flex','hidden')">
+            <span class="text-black font-black tracking-widest text-7xl text-center leading-none">GO<br>CLIMB!</span>
+        </div>
+    </div>
+
+    <!-- Session Summary Overlay -->
+    <div id="sessionSummaryOverlay" class="fixed inset-0 z-[70] bg-neutral-950/95 backdrop-blur-md hidden flex-col items-center justify-center p-6" style="touch-action: none;">
+        <div class="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+            <!-- Decorative gradient bg -->
+            <div class="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/20 blur-3xl rounded-full pointer-events-none"></div>
+            <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-cyan-500/20 blur-3xl rounded-full pointer-events-none"></div>
+            
+            <h2 class="text-3xl font-black text-white text-center mb-2 relative z-10">SESSION<br><span class="text-emerald-400">COMPLETE</span></h2>
+            <p class="text-center text-neutral-500 text-sm font-bold tracking-widest uppercase mb-8 relative z-10" id="summaryDate">Today</p>
+
+            <div class="grid grid-cols-2 gap-4 mb-8 relative z-10">
+                <div class="bg-neutral-950/50 p-4 rounded-2xl border border-neutral-800/50 text-center">
+                    <div class="text-4xl font-black text-emerald-400" id="summaryScore">0</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-500 font-bold mt-1">Total Score</div>
+                </div>
+                <div class="bg-neutral-950/50 p-4 rounded-2xl border border-neutral-800/50 text-center">
+                    <div class="text-4xl font-black text-white" id="summaryTime">0m</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-500 font-bold mt-1">Duration</div>
+                </div>
+                <div class="bg-neutral-950/50 p-4 rounded-2xl border border-neutral-800/50 text-center">
+                    <div class="text-4xl font-black text-white" id="summaryClimbs">0</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-500 font-bold mt-1">Sends</div>
+                </div>
+                <div class="bg-neutral-950/50 p-4 rounded-2xl border border-neutral-800/50 text-center">
+                    <div class="text-4xl font-black text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.3)]" id="summaryBest">V0</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-500 font-bold mt-1">Best Climb</div>
+                </div>
+            </div>
+
+            <div id="sessionFeedbackContainer" class="mb-5 relative z-10">
+                <p class="text-[10px] font-black uppercase tracking-widest text-neutral-400 text-center mb-2">How Did Today's Plan Feel?</p>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="handleSessionFeedback('hard')" class="py-2.5 px-1 bg-neutral-950 border border-neutral-800 hover:border-red-500/50 rounded-xl text-[10px] font-bold text-neutral-300 active:scale-95 transition-all">Exhausted 🥵</button>
+                    <button onclick="handleSessionFeedback('perfect')" class="py-2.5 px-1 bg-neutral-950 border border-neutral-800 hover:border-emerald-500/50 rounded-xl text-[10px] font-bold text-neutral-300 active:scale-95 transition-all">Spot On 🎯</button>
+                    <button onclick="handleSessionFeedback('easy')" class="py-2.5 px-1 bg-neutral-950 border border-neutral-800 hover:border-blue-500/50 rounded-xl text-[10px] font-bold text-neutral-300 active:scale-95 transition-all">More Gas ⚡</button>
+                </div>
+            </div>
+
+            <button onclick="closeSessionSummary()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-lg py-4 rounded-2xl transition-colors haptic-feedback relative z-10 shadow-[0_0_20px_rgba(16,185,129,0.3)]">SAVE & CLOSE</button>
+        </div>
+    </div>
+
+    <div
+        class="max-w-md mx-auto h-[100dvh] bg-neutral-950 relative overflow-hidden flex flex-col sm:border-x sm:border-neutral-800 shadow-2xl">
+
+        <header class="p-5 border-b border-neutral-800 flex justify-between items-center z-10 shrink-0">
+            <div class="flex flex-col">
+                <h1 class="text-2xl font-black tracking-widest bg-gradient-to-r from-emerald-400 to-cyan-500 bg-clip-text text-transparent">SEND<span class="text-white">LOG</span></h1>
+                <span class="app-version-text text-[8px] text-emerald-400 font-bold tracking-widest">v2.0 (AI Coach)</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Header Rest Timer: Single tap to open fullscreen -->
+                <button id="headerTimer" onclick="startRestTimer()" class="flex items-center gap-2 px-3 bg-neutral-900 border border-neutral-800 rounded-2xl transition-all shadow-xl h-11 cursor-pointer active:bg-neutral-800 outline-none">
+                    <div id="headerTimerPulse" class="w-1.5 h-1.5 rounded-full bg-neutral-700 shadow-[0_0_8px_rgba(16,185,129,0)] transition-all"></div>
+                    <span id="btnTimerText" class="text-xs font-mono font-black text-neutral-400 tracking-tighter w-8 text-center transition-colors">2:00</span>
+                </button>
+
+                <button onclick="openSettings()" class="text-neutral-500 hover:text-white transition active:scale-95 flex items-center justify-center bg-neutral-900 w-11 h-11 rounded-2xl border border-neutral-800 shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+            </div>
+
+        </header>
+
+        <main id="mainContainer" class="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory pb-24 relative">
+
+            <section id="page-log" class="p-4 flex flex-col space-y-3 w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
+
+                <!-- Training Mode HUD (shown when training is active) -->
+                <div id="trainingHUD" class="hidden bg-neutral-900 border border-neutral-800 rounded-[2rem] overflow-hidden shadow-lg shrink-0">
+                    <!-- Prepare / Find Route State -->
+                    <div id="trainingHUDPrepare" class="hidden">
+                        <div class="flex items-center justify-between px-5 pt-4 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[9px] font-black uppercase tracking-[0.2em] text-amber-500">🔍 Find Route</span>
+                                <span id="trainingPrepareRungLabel" class="text-[9px] font-black text-neutral-600 uppercase tracking-wider">Rung 1</span>
+                            </div>
+                            <button onclick="forfeitTraining()" class="text-[9px] font-black uppercase tracking-wider text-neutral-600 hover:text-red-400 active:scale-95 transition-all">End</button>
+                        </div>
+                        <div class="flex items-center justify-between px-5 pb-3">
+                            <div>
+                                <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-1">Target Grade</p>
+                                <p id="trainingPrepareTargetGrade" class="text-4xl font-black text-orange-400 leading-none">6A</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-1">Timer</p>
+                                <p class="text-lg font-black font-mono text-neutral-400 leading-none">5:00</p>
+                            </div>
+                        </div>
+                        <div id="trainingPrepareFocusTags" class="px-5 pb-3 flex gap-2 flex-wrap"></div>
+                        <div class="px-5 pb-4">
+                            <button onclick="startTrainingClimbTimer()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-lg shadow-amber-500/20">⏱️ Start 5m Timer</button>
+                        </div>
+                    </div>
+                    <!-- Active Climb State -->
+                    <div id="trainingHUDClimb" class="hidden">
+                        <div class="flex items-center justify-between px-5 pt-4 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[9px] font-black uppercase tracking-[0.2em] text-orange-400">🏋️ Training</span>
+                                <span id="trainingRungLabel" class="text-[9px] font-black text-neutral-600 uppercase tracking-wider">Rung 1</span>
+                            </div>
+                            <button onclick="forfeitTraining()" class="text-[9px] font-black uppercase tracking-wider text-neutral-600 hover:text-red-400 active:scale-95 transition-all">End</button>
+                        </div>
+                        <div class="flex items-center justify-between px-5 pb-3">
+                            <div>
+                                <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-1">Target Grade</p>
+                                <p id="trainingTargetGrade" class="text-4xl font-black text-orange-400 leading-none">6A</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-1">Time Left</p>
+                                <p id="trainingTimerDisplay" class="text-3xl font-black font-mono text-white leading-none">5:00</p>
+                            </div>
+                        </div>
+                        <div id="trainingFocusTags" class="px-5 pb-4 flex gap-2 flex-wrap"></div>
+                    </div>
+                    <!-- Timeout State -->
+                    <div id="trainingHUDTimeout" class="hidden">
+                        <div class="px-5 pt-4 pb-4 text-center">
+                            <p class="text-2xl font-black text-red-400 mb-1">⏰ Time's Up</p>
+                            <p class="text-xs text-neutral-500 mb-3">You reached <span id="trainingPeakDisplay" class="text-orange-400 font-black"></span></p>
+                            <button onclick="endTraining()" class="w-full py-3 rounded-2xl bg-neutral-800 text-white font-black uppercase tracking-widest text-sm active:scale-95 transition-all">Return to Session</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grade Control (Extreme Resiliency) -->
+                <div id="gradeControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-3 relative select-none touch-manipulation shadow-md">
+                    <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Font Grade</p>
+                    <div class="flex items-center justify-between w-full px-6 min-h-[clamp(3.5rem,10vh,5rem)]">
+                        <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
+                            <span class="text-4xl font-black">&minus;</span>
+                        </button>
+                        <span id="displayGrade" class="text-[clamp(2.5rem,12vw,4rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">6A</span>
+                        <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-12 h-12 flex items-center justify-end text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
+                            <span class="text-4xl font-black">+</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Attempts Control (Extreme Resiliency) -->
+                <div id="attemptsControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-3 relative select-none touch-manipulation shadow-md">
+                    <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Attempts</p>
+                    <div class="flex items-center justify-between w-full px-6 min-h-[clamp(3.5rem,10vh,5rem)]">
+                        <button onclick="adjTries(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
+                            <span class="text-4xl font-black">&minus;</span>
+                        </button>
+                        <span id="displayTries" class="text-[clamp(2.5rem,12vw,3.5rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">1</span>
+                        <button onclick="adjTries(1)" class="w-12 h-12 flex items-center justify-end text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
+                            <span class="text-4xl font-black">+</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="statusButtonsContainer" class="flex gap-3 shrink-0 h-[clamp(4rem,12vh,5.5rem)]">
+                    <button id="btnTop" onclick="toggleTop()"
+                        class="flex-1 rounded-[1.8rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback">
+                        Topped
+                    </button>
+                    <button id="btnFlash" onclick="toggleFlash()"
+                        class="flex-1 rounded-[1.8rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback transition-transform">
+                        Flash
+                    </button>
+                </div>
+
+                <div id="tagContainer" class="flex flex-wrap justify-center gap-2 mt-1 shrink-0 px-2 lg:px-4">
+                    <!-- Dynamic style tags go here -->
+                </div>
+
+                <div id="submitButtonContainer" class="mt-auto pt-2 shrink-0">
+                    <button onclick="logClimb()" id="mainAddButton"
+                        class="w-full h-[clamp(4.5rem,14vh,6.5rem)] rounded-[2.5rem] bg-emerald-500 text-black font-black uppercase tracking-[0.3em] text-2xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none">
+                        Log Climb
+                    </button>
+                </div>
+            </section>
+
+            <section id="page-session" class="p-5 flex flex-col w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
+                <div class="flex justify-between items-center bg-neutral-900 rounded-[2rem] p-5 border border-neutral-800 shrink-0 mb-4 shadow-sm">
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-2 mb-1">
+                            <p class="text-neutral-500 text-[10px] font-black uppercase tracking-widest">Session Score</p>
+                            <span id="sessionTimerDisplay" class="text-[9px] font-mono text-neutral-400 bg-black/30 px-2 py-0.5 rounded-md hidden">00:00:00</span>
+                        </div>
+                        <h2 id="sessionScoreDisplay" class="text-4xl font-black text-emerald-400 leading-none">0</h2>
+                    </div>
+                    <div class="flex gap-2">
+                        <!-- Morphing Button -->
+                        <button id="btnSessionAction" onclick="handleSessionAction()" 
+                            class="px-8 py-3 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-base font-black active:scale-95 transition-all shadow-lg active:bg-emerald-500 active:text-black">
+                            START
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Training Mode Banner (shown in session when training is active) -->
+                <div id="trainingSessionBanner" class="hidden bg-orange-500/10 border border-orange-500/30 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
+                    <span class="text-xl">🏋️</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-wider text-orange-400">Training Active</p>
+                        <p class="text-xs text-neutral-400">Target: <span id="trainingBannerGrade" class="text-orange-400 font-black">6A</span> · <span id="trainingBannerTimer" class="font-mono text-neutral-300">5:00</span></p>
+                    </div>
+                    <button onclick="switchTab('log')" class="text-[9px] font-black uppercase tracking-wider text-orange-400 bg-orange-500/20 border border-orange-500/30 px-3 py-1.5 rounded-xl active:scale-95 transition-all">Go Log</button>
+                </div>
+
+                <!-- Training Ladder Launch Button -->
+                <div id="trainingLaunchCard" class="bg-neutral-900 border border-neutral-800 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0 cursor-pointer active:bg-neutral-800/80 transition-all" onclick="openTrainingConfig()">
+                    <div class="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-center shrink-0">
+                        <span class="text-lg">🏋️</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-black text-white">Training Ladder</p>
+                        <p class="text-[10px] text-neutral-500">Grade-by-grade progressive challenge</p>
+                    </div>
+                    <svg class="w-4 h-4 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </div>
+
+                <!-- Live Intra-Session Fatigue & Cutoff Banner -->
+                <div id="liveFatigueAlert" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-2xl p-4 mb-4 text-amber-400 flex items-start gap-3 shadow-lg shrink-0">
+                    <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <div class="flex-1">
+                        <p class="text-xs font-black uppercase tracking-wider text-amber-300">Cutoff / Fatigue Alert</p>
+                        <p id="liveFatigueText" class="text-[11px] text-neutral-200 leading-snug mt-1"></p>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto mb-2 bg-neutral-900 rounded-[2rem] p-4 border border-neutral-800">
+                    <h3 class="text-[10px] font-black text-neutral-500 mb-3 uppercase tracking-widest">Logged Climbs</h3>
+                    <ul id="sessionList" class="space-y-2">
+                        <li class="text-neutral-500 text-center mt-10 text-sm">No climbs logged yet.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- PAGE: PLANNER & AI COACH -->
+            <section id="page-planner" class="p-5 flex flex-col space-y-4 w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative pb-28">
+                <!-- Header -->
+                <div class="flex justify-between items-center shrink-0">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-2xl font-black text-white tracking-tight">AI Coach</h2>
+                            <span class="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/30">v2 Engine</span>
+                        </div>
+                        <p class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mt-0.5">Readiness & Session Blueprint</p>
+                    </div>
+                    <button onclick="renderPlannerUI()" class="p-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white active:scale-95 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    </button>
+                </div>
+
+                <!-- Pre-Session Contextual Modifiers (1-tap chips) -->
+                <div class="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-3.5 space-y-2.5 shadow-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Quick Check-in</span>
+                        <span class="text-[9px] text-neutral-500">Auto-tunes advice</span>
+                    </div>
+                    <div class="flex gap-2 text-[10px] font-bold">
+                        <span class="text-neutral-500 self-center text-[10px] uppercase font-black mr-1">Fingers:</span>
+                        <button onclick="setPlannerCheckin('fingers', 'fresh')" id="checkin-finger-fresh" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">Fresh</button>
+                        <button onclick="setPlannerCheckin('fingers', 'stiff')" id="checkin-finger-stiff" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">Stiff</button>
+                        <button onclick="setPlannerCheckin('fingers', 'tweaky')" id="checkin-finger-tweaky" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">Tweaky</button>
+                    </div>
+                    <div class="flex gap-2 text-[10px] font-bold">
+                        <span class="text-neutral-500 self-center text-[10px] uppercase font-black mr-1">Time:</span>
+                        <button onclick="setPlannerCheckin('time', 45)" id="checkin-time-45" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">45m</button>
+                        <button onclick="setPlannerCheckin('time', 90)" id="checkin-time-90" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">90m</button>
+                        <button onclick="setPlannerCheckin('time', 120)" id="checkin-time-120" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">2h+</button>
+                    </div>
+                </div>
+
+                <!-- Daily Readiness Gauge Card -->
+                <div class="bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 rounded-[2rem] p-5 shadow-lg relative overflow-hidden">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Overall Readiness</p>
+                            <h3 id="plannerReadinessTitle" class="text-lg font-black text-white mt-0.5">Calculating...</h3>
+                        </div>
+                        <span id="plannerReadinessScore" class="text-3xl font-black text-emerald-400 tracking-tight">--%</span>
+                    </div>
+                    
+                    <div class="w-full bg-neutral-800 h-2.5 rounded-full overflow-hidden mb-3">
+                        <div id="plannerReadinessGauge" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+
+                    <p id="plannerReadinessDesc" class="text-xs text-neutral-400 leading-relaxed"></p>
+                </div>
+
+                <!-- Dual Workload & Tendon Gauges -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+                        <div class="flex justify-between items-start mb-1">
+                            <p class="text-[9px] font-black uppercase tracking-wider text-neutral-500">ACWR (Fatigue)</p>
+                            <span id="plannerACWRVal" class="text-base font-black text-white">1.0</span>
+                        </div>
+                        <div class="mt-2">
+                            <span id="plannerACWRBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400">Sweet Spot</span>
+                            <p class="text-[10px] text-neutral-500 mt-1.5 leading-snug">7d acute vs 28d chronic load</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+                        <div class="flex justify-between items-start mb-1">
+                            <p class="text-[9px] font-black uppercase tracking-wider text-neutral-500">Tendon Status</p>
+                            <span id="plannerTendonVal" class="text-base font-black text-white">100%</span>
+                        </div>
+                        <div class="mt-2">
+                            <span id="plannerTendonBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400">100% Ready</span>
+                            <p id="plannerTendonDesc" class="text-[10px] text-neutral-500 mt-1.5 leading-snug">48h collagen remodeling</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Today's Structured Session Blueprint -->
+                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm font-black text-white uppercase tracking-wider">Session Blueprint</h3>
+                        <button onclick="switchTab('log')" class="text-[10px] font-bold text-emerald-400 hover:underline">Start in Log &rarr;</button>
+                    </div>
+
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-[10px] font-bold text-neutral-500 uppercase">Focus:</span>
+                        <div id="plannerTargetTags" class="flex items-center gap-1.5 flex-wrap"></div>
+                    </div>
+
+                    <div id="plannerPhasesList" class="space-y-2.5"></div>
+
+                    <div class="p-3 bg-neutral-950 rounded-xl border border-neutral-800">
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span class="text-[10px] font-black uppercase tracking-wider text-amber-400">Exit Rule (When to Stop)</span>
+                        </div>
+                        <p id="plannerExitRule" class="text-[11px] text-neutral-400 leading-snug"></p>
+                    </div>
+                </div>
+
+                <!-- Grade Breakthrough Readiness Card -->
+                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Grade Breakthrough</p>
+                            <h4 class="text-base font-black text-white mt-0.5">Project Next: <span id="plannerGradeTarget" class="text-emerald-400">--</span></h4>
+                        </div>
+                        <span id="plannerGradeReadinessScore" class="text-2xl font-black text-white">--%</span>
+                    </div>
+
+                    <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
+                        <div id="plannerGradeBar" class="h-full bg-blue-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+
+                    <p id="plannerGradeVerdict" class="text-xs text-neutral-300 leading-snug"></p>
+
+                    <div class="pt-2 border-t border-neutral-800 grid grid-cols-2 gap-2 text-[10px] text-neutral-400">
+                        <div>
+                            <span class="font-bold text-neutral-500 block uppercase text-[9px]">Base Pyramid</span>
+                            <span id="plannerGradePyramid">--</span>
+                        </div>
+                        <div>
+                            <span class="font-bold text-neutral-500 block uppercase text-[9px]">Sub-Max Flash</span>
+                            <span id="plannerGradeFlash">--</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="page-history" class="flex flex-col w-full shrink-0 h-[100%] overflow-hidden snap-center snap-always relative">
+                <div class="px-5 pt-6 pb-2 flex justify-between items-center shrink-0">
+                    <div class="flex flex-col">
+                        <h2 class="text-2xl font-black text-white tracking-tight">History</h2>
+                        <p id="historyPeriodSummary" class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mt-1">0 sessions completed</p>
+                    </div>
+                    <!-- History View Toggle -->
+                    <div class="flex bg-neutral-950 rounded-xl p-1 border border-neutral-800 relative z-0">
+                        <button onclick="setHistoryMode('ALL')" id="historyBtnAll"
+                            class="text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors z-10 bg-emerald-500 text-black">ALL</button>
+                        <button onclick="setHistoryMode('WEEK')" id="historyBtnWeek"
+                            class="text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors z-10 text-neutral-500 hover:text-white">WEEK</button>
+                        <button onclick="setHistoryMode('MONTH')" id="historyBtnMonth"
+                            class="text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors z-10 text-neutral-500 hover:text-white">MONTH</button>
+                    </div>
+                </div>
+
+                <!-- Scrollable content area for stats + chart -->
+                <div class="flex-1 overflow-y-auto overflow-x-hidden pb-24 relative z-10">
+                    <!-- Dashboard Stat Grid -->
+                    <div class="px-5 mt-4 flex flex-col gap-2">
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md transition-all hover:bg-neutral-800/80 active:scale-[0.98] cursor-pointer" data-metric="score" onclick="setActiveTrendMetric('score')">
+                                <span class="text-emerald-400 text-xl font-black" id="statTotalPoints">0</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">Points</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md transition-all hover:bg-neutral-800/80 active:scale-[0.98] cursor-pointer" data-metric="sends" onclick="setActiveTrendMetric('sends')">
+                                <span class="text-cyan-400 text-xl font-black" id="statTotalSends">0</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">Total Sends</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md transition-all hover:bg-neutral-800/80 active:scale-[0.98] cursor-pointer" data-metric="avg_grade" onclick="setActiveTrendMetric('avg_grade')">
+                                <span class="text-purple-400 text-xl font-black" id="statAvgGrade">-</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">Avg Grade</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md transition-all hover:bg-neutral-800/80 active:scale-[0.98] cursor-pointer" data-metric="flash_pct" onclick="setActiveTrendMetric('flash_pct')">
+                                <span class="text-amber-400 text-xl font-black" id="statFlashRate">-</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">Flash %</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md transition-all hover:bg-neutral-800/80 active:scale-[0.98] cursor-pointer" data-metric="projects" onclick="setActiveTrendMetric('projects')">
+                                <span class="text-orange-400 text-xl font-black" id="statProjectTries">0</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">Proj Tries</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md transition-all hover:bg-neutral-800/80 active:scale-[0.98] cursor-pointer" data-metric="duration" onclick="setActiveTrendMetric('duration')">
+                                <span class="text-blue-400 text-xl font-black font-mono text-xs" id="statAvgTime">-</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">Avg Duration</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Streak & Personal Records -->
+                    <div class="px-5 mt-3 flex flex-col gap-2">
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md">
+                                <span class="text-orange-400 text-2xl font-black" id="statCurrentStreak">0</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">🔥 Streak</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md border-orange-500/20 bg-orange-500/5">
+                                <span class="text-orange-400 text-2xl font-black" id="prHighestLadder">-</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">🪜 Peak Ladder</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2.5 flex flex-col items-center justify-center text-center backdrop-blur-md">
+                                <span class="text-amber-400 text-2xl font-black" id="statLongestStreak">0</span>
+                                <span class="text-[8px] uppercase font-black tracking-widest text-neutral-500 mt-1">🏅 Best Streak</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center backdrop-blur-md">
+                                <span class="text-emerald-400 text-lg font-black" id="prBestScore">-</span>
+                                <span class="text-[7px] uppercase font-black tracking-widest text-neutral-500 mt-0.5">Best Score</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center backdrop-blur-md">
+                                <span class="text-blue-400 text-lg font-black" id="prHighestGrade">-</span>
+                                <span class="text-[7px] uppercase font-black tracking-widest text-neutral-500 mt-0.5">Top Grade</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center backdrop-blur-md">
+                                <span class="text-cyan-400 text-lg font-black" id="prMostSends">-</span>
+                                <span class="text-[7px] uppercase font-black tracking-widest text-neutral-500 mt-0.5">Most Sends</span>
+                            </div>
+                            <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center backdrop-blur-md">
+                                <span class="text-purple-400 text-lg font-black" id="prLongestSession">-</span>
+                                <span class="text-[7px] uppercase font-black tracking-widest text-neutral-500 mt-0.5">Longest</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart card -->
+                    <div class="mx-5 mt-2 bg-transparent overflow-hidden relative z-0 flex flex-col">
+                        <div class="flex justify-between items-center px-2 pt-2 pb-1 relative z-10">
+                            <div class="flex items-center bg-neutral-900/80 backdrop-blur-md rounded-lg p-1 border border-neutral-800 shadow-md">
+                                <button onclick="setChartType('line')" id="chartBtnLine" class="text-[9px] font-black px-3 py-1.5 rounded transition-colors bg-emerald-500 text-black uppercase tracking-widest">Trend</button>
+                                <button onclick="setChartType('radar')" id="chartBtnRadar" class="text-[9px] font-black px-3 py-1.5 rounded transition-colors text-neutral-500 hover:text-white uppercase tracking-widest">Style</button>
+                                <button onclick="setChartType('bar')" id="chartBtnBar" class="text-[9px] font-black px-3 py-1.5 rounded transition-colors text-neutral-500 hover:text-white uppercase tracking-widest">Pyramid</button>
+                            </div>
+                            
+                            <!-- Dynamic selector container (shows for 'line' chart type) -->
+                            <div id="chartSelectorsContainer" class="flex items-center gap-1.5 z-50">
+                                <!-- Secondary Pill (Compare) -->
+                                <div class="relative inline-block" id="secondarySelectorWrapper">
+                                    <button onclick="toggleChartDropdown('secondary')" id="secondarySelBtn" class="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded bg-neutral-900 border border-purple-500/40 text-purple-400 select-none shadow-sm active:scale-95 transition-all">
+                                        <span class="text-[9px]">⦾</span>
+                                        <span id="secondarySelText">Compare: None</span>
+                                        <span class="text-[6px] opacity-75">▼</span>
+                                    </button>
+                                    <div id="secondarySelDropdown" class="hidden absolute right-0 top-full mt-1.5 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl py-1 min-w-[100px] z-50 text-[9px] font-black uppercase tracking-wider divide-y divide-neutral-800/40">
+                                        <button onclick="selectChartMetric('secondary', 'none')" class="w-full text-left px-3 py-2 text-neutral-500 hover:bg-neutral-800/60 transition-colors">None</button>
+                                        <button onclick="selectChartMetric('secondary', 'score')" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-neutral-800/60 transition-colors">Score</button>
+                                        <button onclick="selectChartMetric('secondary', 'sends')" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-neutral-800/60 transition-colors">Sends</button>
+                                        <button onclick="selectChartMetric('secondary', 'avg_grade')" class="w-full text-left px-3 py-2 text-purple-400 hover:bg-neutral-800/60 transition-colors">Avg Grade</button>
+                                        <button onclick="selectChartMetric('secondary', 'flash_pct')" class="w-full text-left px-3 py-2 text-amber-400 hover:bg-neutral-800/60 transition-colors">Flash %</button>
+                                        <button onclick="selectChartMetric('secondary', 'projects')" class="w-full text-left px-3 py-2 text-orange-400 hover:bg-neutral-800/60 transition-colors">Proj Tries</button>
+                                        <button onclick="selectChartMetric('secondary', 'duration')" class="w-full text-left px-3 py-2 text-blue-400 hover:bg-neutral-800/60 transition-colors">Duration</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="w-full px-2 pb-4 cursor-pointer" style="min-height: 280px; height: 40vh;">
+                            <canvas id="progressionChart" class="w-full h-full"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Heatmap (Monthly) -->
+                    <div class="px-5 mt-3 mb-4">
+                        <div class="bg-neutral-900/80 border border-neutral-800 rounded-xl p-4 backdrop-blur-md" id="heatmapContainer">
+                            <div class="flex justify-between items-center mb-3">
+                                <button onclick="changeHeatmapMonth(-1)" class="text-neutral-500 hover:text-white active:scale-90 transition-all p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                                </button>
+                                <h3 class="text-sm font-black text-white uppercase tracking-wider" id="heatmapMonthLabel">-</h3>
+                                <button onclick="changeHeatmapMonth(1)" class="text-neutral-500 hover:text-white active:scale-90 transition-all p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1.5 text-center mb-2">
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Mon</span>
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Tue</span>
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Wed</span>
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Thu</span>
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Fri</span>
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Sat</span>
+                                <span class="text-[8px] font-black text-neutral-600 uppercase">Sun</span>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1.5" id="heatmapGrid"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Natural Session Log -->
+                    <div class="px-5 mt-3 pb-8">
+                        <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Session Log</h3>
+                        <ul id="historyList" class="flex flex-col gap-3">
+                            <li class="text-neutral-500 text-sm px-4 py-6 text-center">No history yet.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="page-leaderboard" class="p-5 flex flex-col w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
+                <div class="flex justify-between items-center mb-6 mt-2">
+                    <h2 class="text-2xl font-black tracking-wide">Leaderboard</h2>
+                    <button onclick="toggleAdminMode()"
+                        class="text-xs font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.3)] active:scale-95 transition-transform">
+                        ONLINE
+                    </button>
+                </div>
+
+                <div
+                    class="bg-neutral-900 p-5 rounded-[2rem] mb-4 border border-neutral-800 shrink-0 shadow-lg relative overflow-hidden">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none">
+                    </div>
+                    <p class="text-neutral-500 text-xs font-black uppercase tracking-[0.2em] mb-3 relative z-10">Your
+                        Player Name</p>
+                    <div class="flex gap-2 relative z-10">
+                        <input type="text" id="playerNameInput" placeholder="Enter name..."
+                            class="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors">
+                        <button onclick="savePlayerName()"
+                            class="bg-emerald-500 text-black font-black px-4 rounded-xl active:scale-95 transition-transform shrink-0">SAVE</button>
+                    </div>
+                    <div class="mt-4 flex justify-between items-center relative z-10">
+                        <p class="text-sm text-neutral-400">Total Score: <span id="syncTotalScore"
+                                class="text-emerald-400 font-bold ml-1">0</span></p>
+                        <button onclick="syncScoreToLeaderboard()" id="btnSync"
+                            class="text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg transition-colors active:scale-95">Sync
+                            Score</button>
+                    </div>
+                </div>
+
+                <div
+                    class="bg-neutral-900 rounded-[2rem] border border-neutral-800 flex-1 flex flex-col min-h-0 relative shadow-2xl">
+                    <div
+                        class="p-5 border-b border-neutral-800 shrink-0 flex justify-between items-center relative z-10">
+                        <div class="flex bg-neutral-950 rounded-xl p-1 border border-neutral-800 relative z-0">
+                            <button onclick="setLbMode('ALL')" id="lbBtnAll"
+                                class="text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors z-10 bg-emerald-500 text-black">ALL</button>
+                            <button onclick="setLbMode('WEEK')" id="lbBtnWeek"
+                                class="text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors z-10 text-neutral-500 hover:text-white">WEEK</button>
+                            <button onclick="setLbMode('MONTH')" id="lbBtnMonth"
+                                class="text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors z-10 text-neutral-500 hover:text-white">MONTH</button>
+                        </div>
+                        <button onclick="loadLeaderboard()" class="text-neutral-500 hover:text-white transition-colors"
+                            title="Refresh">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                </path>
+                            </svg>
+                        </button>
+                    </div>
+                    <ul id="leaderboardList" class="space-y-0 overflow-y-auto flex-1 p-2 pb-24">
+                        <div class="flex justify-center items-center h-full">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                        </div>
+                    </ul>
+                </div>
+
+                <!-- Sticky Rank Footer (Individual Rank) -->
+                <div id="leaderboardSticky" class="absolute bottom-0 left-0 right-0 p-4 bg-neutral-900/90 backdrop-blur-xl border-t border-neutral-800 transform translate-y-full transition-transform duration-300 z-30 flex justify-between items-center shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+                    <div class="flex items-center gap-3">
+                        <div id="stickyRank" class="w-12 h-12 rounded-full bg-emerald-500 text-black flex items-center justify-center font-black text-xl shadow-lg">#?</div>
+                        <div class="flex flex-col">
+                            <span id="stickyName" class="font-black text-sm text-white uppercase tracking-wider">YOU</span>
+                            <span class="text-[10px] text-neutral-500 uppercase font-black tracking-widest">Global Rank</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span id="stickyScore" class="text-3xl font-black text-emerald-400">0</span>
+                        <span class="text-[10px] text-neutral-500 font-black uppercase tracking-widest ml-1">pts</span>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <nav
+            class="absolute bottom-0 w-full bg-neutral-950/90 backdrop-blur-md border-t border-neutral-800 p-2 pb-6 sm:pb-4 flex justify-around z-20">
+            <button onclick="switchTab('log')" id="nav-log"
+                class="text-emerald-500 flex flex-col items-center p-2 w-[19%] transition-colors">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+                </svg>
+                <span class="text-[9px] font-black uppercase tracking-wider">Log</span>
+            </button>
+            <button onclick="switchTab('session')" id="nav-session"
+                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                    </path>
+                </svg>
+                <span class="text-[9px] font-black uppercase tracking-wider">Session</span>
+            </button>
+            <button onclick="switchTab('planner')" id="nav-planner"
+                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span class="text-[9px] font-black uppercase tracking-wider">Coach</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-history"
+                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+                <span class="text-[9px] font-black uppercase tracking-wider">History</span>
+            </button>
+            <button onclick="switchTab('leaderboard')" id="nav-leaderboard"
+                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors relative">
+                <div class="absolute top-2 right-4 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                    </path>
+                </svg>
+                <span class="text-[9px] font-black uppercase tracking-wider">Global</span>
+            </button>
+        </nav>
+
+        </div>
+
+
+    <!-- TRAINING MODE CONFIG MODAL -->
+    <div id="trainingConfigOverlay" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm hidden items-end justify-center" onclick="closeTrainingConfig(event)">
+        <div id="trainingConfigSheet" class="bg-neutral-950 border border-neutral-800 rounded-t-[2.5rem] w-full max-w-md flex flex-col shadow-2xl pointer-events-auto transform translate-y-full transition-transform duration-300 ease-out pb-10">
+            <!-- Handle -->
+            <div class="flex justify-center pt-3 pb-1 shrink-0">
+                <div class="w-10 h-1 bg-neutral-700 rounded-full"></div>
+            </div>
+            <!-- Header -->
+            <div class="px-6 pt-2 pb-5 border-b border-neutral-800">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-xl font-black text-white">🏋️ Training Ladder</h3>
+                        <p class="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mt-0.5">Configure your challenge</p>
+                    </div>
+                    <button onclick="closeTrainingConfig()" class="text-neutral-500 hover:text-white bg-neutral-800 p-2 rounded-full active:scale-95 transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Config Body -->
+            <div class="px-6 py-5 space-y-6">
+                <!-- Starting Grade Picker -->
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Starting Grade</p>
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-between px-5 py-4">
+                        <button onclick="adjTrainingStartGrade(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-500 active:text-white transition-colors">
+                            <span class="text-3xl font-black">&minus;</span>
+                        </button>
+                        <div class="text-center">
+                            <span id="trainingConfigGradeDisplay" class="text-4xl font-black text-orange-400">6A</span>
+                            <p class="text-[9px] text-neutral-600 font-bold uppercase tracking-widest mt-1" id="trainingConfigGradeHint">4 below max</p>
+                        </div>
+                        <button onclick="adjTrainingStartGrade(1)" class="w-12 h-12 flex items-center justify-end text-neutral-500 active:text-white transition-colors">
+                            <span class="text-3xl font-black">+</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- Focus Style Selector -->
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Training Focus</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="focusBtnBest" onclick="setTrainingFocus('best')" class="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-700 bg-neutral-900 transition-all active:scale-95">
+                            <span class="text-2xl">💪</span>
+                            <span class="text-xs font-black uppercase tracking-wider text-white">Best Style</span>
+                            <div id="bestStyleTags" class="flex flex-wrap gap-1 justify-center"></div>
+                        </button>
+                        <button id="focusBtnAnti" onclick="setTrainingFocus('anti')" class="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-700 bg-neutral-900 transition-all active:scale-95">
+                            <span class="text-2xl">🎯</span>
+                            <span class="text-xs font-black uppercase tracking-wider text-white">Anti-Style</span>
+                            <div id="antiStyleTags" class="flex flex-wrap gap-1 justify-center"></div>
+                        </button>
+                    </div>
+                    <p class="text-[9px] text-neutral-500 text-center mt-2 font-bold">Pool of 4 styles rotating progressively every rung to test your adaptability!</p>
+                </div>
+            </div>
+            <!-- Launch Button -->
+            <div class="px-6">
+                <button onclick="startTrainingMode()" class="w-full py-4 rounded-2xl bg-orange-500 text-black font-black uppercase tracking-[0.2em] text-lg active:scale-95 transition-all shadow-xl shadow-orange-500/20">🚀 Launch Ladder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACHIEVEMENTS TOAST -->
+    <div id="toastAlert" class="fixed top-4 left-4 right-4 bg-emerald-900/95 border-2 border-emerald-500 rounded-2xl p-4 shadow-[0_0_30px_rgba(16,185,129,0.4)] z-[200] transform -translate-y-[150%] transition-transform duration-500 flex items-center gap-4 backdrop-blur-md">
+        <div class="text-4xl">🏆</div>
+        <div>
+            <p class="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Achievement Unlocked</p>
+            <h3 id="toastTitle" class="text-lg font-black text-white">The Flash</h3>
+        </div>
+    </div>
+
+    <!-- CLOUD SYNC TOAST -->
+    <div id="cloudToast" class="fixed top-4 left-4 right-4 bg-neutral-900/95 border border-neutral-800 rounded-2xl p-4 shadow-[0_0_30px_rgba(0,0,0,0.5)] z-[200] transform -translate-y-[150%] transition-transform duration-500 flex items-center gap-4 backdrop-blur-md">
+        <div id="cloudToastIcon" class="text-3xl">☁️</div>
+        <div>
+            <p id="cloudToastHeader" class="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Google Drive Sync</p>
+            <h3 id="cloudToastBody" class="text-sm font-bold text-white">Connecting...</h3>
+        </div>
+    </div>
+
+    <!-- SESSION DETAIL OVERLAY -->
+    <div id="sessionDetailOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] hidden items-end justify-center pointer-events-auto" onclick="closeSessionDetail(event)">
+        <div id="sessionDetailSheet" class="bg-neutral-950 border border-neutral-800 rounded-t-[2.5rem] w-full max-w-md max-h-[90dvh] flex flex-col shadow-2xl pointer-events-auto transform translate-y-full transition-transform duration-300 ease-out">
+            <!-- Handle -->
+            <div class="flex justify-center pt-3 pb-1 shrink-0">
+                <div class="w-10 h-1 bg-neutral-700 rounded-full"></div>
+            </div>
+            <!-- Header -->
+            <div class="px-6 pt-2 pb-4 shrink-0 border-b border-neutral-800">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p id="sdDate" class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-0.5"></p>
+                        <h3 id="sdScore" class="text-3xl font-black text-emerald-400"></h3>
+                    </div>
+                    <div class="flex gap-2 items-center mt-1">
+                        <button onclick="openEditSession(currentSessionDetailIndex)" class="text-emerald-400 hover:text-white transition active:scale-95 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border border-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.05)]">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                            </svg>
+                            EDIT
+                        </button>
+                        <button onclick="closeSessionDetail()" class="text-neutral-500 hover:text-white transition active:scale-95 bg-neutral-800 p-2 rounded-full">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <!-- Mini stats row -->
+                <div class="flex gap-3 mt-3">
+                    <div class="flex-1 bg-neutral-900 rounded-xl p-2 text-center border border-neutral-800">
+                        <p class="text-[8px] uppercase font-black tracking-widest text-neutral-500">Climbs</p>
+                        <p id="sdClimbCount" class="text-lg font-black text-white">-</p>
+                    </div>
+                    <div class="flex-1 bg-neutral-900 rounded-xl p-2 text-center border border-neutral-800">
+                        <p class="text-[8px] uppercase font-black tracking-widest text-neutral-500">Sends</p>
+                        <p id="sdSends" class="text-lg font-black text-emerald-400">-</p>
+                    </div>
+                    <div class="flex-1 bg-neutral-900 rounded-xl p-2 text-center border border-neutral-800">
+                        <p class="text-[8px] uppercase font-black tracking-widest text-neutral-500">Flashes</p>
+                        <p id="sdFlashes" class="text-lg font-black text-amber-400">-</p>
+                    </div>
+                    <div class="flex-1 bg-neutral-900 rounded-xl p-2 text-center border border-neutral-800">
+                        <p class="text-[8px] uppercase font-black tracking-widest text-neutral-500">Projects</p>
+                        <p id="sdProjects" class="text-lg font-black text-neutral-300">-</p>
+                    </div>
+                </div>
+                <!-- Grade distribution bar -->
+                <div id="sdGradeBar" class="flex gap-0.5 mt-3 h-8 rounded-lg overflow-hidden"></div>
+                <div id="sdGradeLabels" class="flex mt-1 gap-0.5"></div>
+            </div>
+            <!-- Climb list -->
+            <div class="flex-1 overflow-y-auto px-4 py-3">
+                <p class="text-[9px] uppercase font-black tracking-widest text-neutral-500 mb-2">All Climbs</p>
+                <ul id="sdClimbList" class="space-y-2"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT SESSION OVERLAY -->
+    <div id="editSessionOverlay" class="fixed inset-0 bg-neutral-950 z-[160] hidden flex-col pointer-events-auto overflow-hidden">
+        <div class="p-5 flex justify-between items-center shrink-0 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-xl z-20">
+            <h2 class="text-2xl font-black text-white">Edit Session</h2>
+            <button onclick="closeEditSession()" class="text-neutral-500 hover:text-white transition active:scale-95 bg-neutral-800 p-2 rounded-full">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-5 pb-24 z-10 space-y-6">
+            <!-- Date & Time Section -->
+            <div>
+                <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Session Date & Time</h3>
+                <div class="bg-neutral-900 p-4 rounded-2xl border border-neutral-800">
+                    <input type="datetime-local" id="editSessionDateTime" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors font-bold">
+                </div>
+            </div>
+
+            <!-- Duration Section -->
+            <div>
+                <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Session Duration</h3>
+                <div class="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 flex gap-4">
+                    <div class="flex-1">
+                        <label class="text-[9px] uppercase font-black tracking-widest text-neutral-500 block mb-1">Hours</label>
+                        <input type="number" id="editSessionHours" min="0" max="999" placeholder="0" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors font-bold text-center">
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-[9px] uppercase font-black tracking-widest text-neutral-500 block mb-1">Minutes</label>
+                        <input type="number" id="editSessionMinutes" min="0" max="59" placeholder="0" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors font-bold text-center">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Past Climbs Section -->
+            <div>
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest">Logged Climbs</h3>
+                    <span id="editSessionScoreDisplay" class="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">0 pts</span>
+                </div>
+                <div class="bg-neutral-900 p-4 rounded-2xl border border-neutral-800">
+                    <ul id="editSessionClimbList" class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        <!-- Climbs list with delete buttons -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Save & Cancel Buttons -->
+            <div class="flex gap-4 pt-4 shrink-0">
+                <button onclick="closeEditSession()" class="flex-1 py-4 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded-2xl text-white font-black uppercase tracking-wider transition active:scale-95 text-sm">
+                    Cancel
+                </button>
+                <button onclick="saveEditedSession()" class="flex-1 py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-2xl font-black uppercase tracking-wider transition active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS OVERLAY -->
+    <div id="settingsOverlay" class="fixed inset-0 bg-neutral-950 z-[100] hidden flex-col pointer-events-auto overflow-hidden">
+        <div class="p-5 flex justify-between items-center shrink-0 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur-xl z-20">
+            <h2 class="text-2xl font-black text-white">Profile</h2>
+            <button onclick="closeSettings()" class="text-neutral-500 hover:text-white transition active:scale-95 bg-neutral-800 p-2 rounded-full">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-5 pb-20 z-10">
+            <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Preferences</h3>
+            <div class="flex items-center justify-between bg-neutral-900 p-4 rounded-2xl border border-neutral-800 mb-6">
+                <div>
+                    <span class="text-sm font-bold text-white block">Max Grade</span>
+                    <span class="text-[10px] text-neutral-500 uppercase tracking-wider">Your projected max</span>
+                </div>
+                <div class="relative flex items-center">
+                    <select id="vMax" class="appearance-none bg-neutral-800 text-emerald-400 text-lg font-black outline-none cursor-pointer pl-4 pr-8 py-2 rounded-xl relative z-10 border border-neutral-700">
+                    </select>
+                    <div class="absolute right-3 flex items-center pointer-events-none z-20 text-emerald-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Data Management</h3>
+            <div class="flex gap-3 mb-8">
+                <button onclick="exportData()" class="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-900 border border-neutral-800 rounded-2xl active:scale-95 transition hover:border-emerald-500/50 group">
+                    <svg class="w-8 h-8 text-neutral-400 group-hover:text-emerald-400 mb-2 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span class="text-sm font-bold text-white">Export Code</span>
+                </button>
+                <button onclick="document.getElementById('importFile').click()" class="flex-1 flex flex-col items-center justify-center p-4 bg-neutral-900 border border-neutral-800 rounded-2xl active:scale-95 transition hover:border-amber-500/50 group relative">
+                    <svg class="w-8 h-8 text-neutral-400 group-hover:text-amber-400 mb-2 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span class="text-sm font-bold text-white">Import Code</span>
+                    <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
+                </button>
+            </div>
+            
+            <button onclick="forceHardRefresh()" class="w-full mt-4 flex items-center justify-center gap-3 p-4 bg-neutral-900 border border-neutral-800 rounded-2xl active:scale-95 transition hover:border-blue-500/50 group mb-6">
+                <svg class="w-6 h-6 text-neutral-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span id="hardRefreshText" class="text-sm font-bold text-white">Hard Refresh (v7.4.0)</span>
+            </button>
+
+            <!-- GOOGLE DRIVE CLOUD SYNC -->
+            <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest mb-3">Google Drive Cloud Sync</h3>
+            <div class="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 mb-6">
+                <div id="gdriveAuthContainer" class="flex flex-col gap-4">
+                    <!-- Disconnected State -->
+                    <div id="gdriveDisconnected" class="flex flex-col items-center gap-3 py-4">
+                        <div class="w-12 h-12 rounded-full bg-neutral-850 flex items-center justify-center border border-neutral-800 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                            <svg class="w-6 h-6 text-neutral-400" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+                            </svg>
+                        </div>
+                        <div class="text-center">
+                            <span class="text-sm font-bold text-white block">Cloud Backups</span>
+                            <span class="text-[10px] text-neutral-500 uppercase tracking-wider block mt-0.5">Securely sync your climbs to your Google Drive</span>
+                        </div>
+                        <button onclick="GDrive.login()" class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white hover:bg-neutral-100 text-neutral-900 font-bold rounded-xl active:scale-95 transition text-sm">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22-.03-.63z"/>
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            </svg>
+                            Sign in with Google
+                        </button>
+                    </div>
+                    
+                    <!-- Connected State -->
+                    <div id="gdriveConnected" class="hidden flex-col gap-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                </div>
+                                <div class="max-w-[180px] overflow-hidden">
+                                    <span class="text-[9px] text-neutral-500 block uppercase tracking-widest font-black">Logged in as</span>
+                                    <span id="gdriveUserEmail" class="text-xs font-bold text-white block truncate">climber@gmail.com</span>
+                                </div>
+                            </div>
+                            <button onclick="GDrive.logout()" class="text-[9px] font-black text-red-400 hover:text-red-300 transition uppercase tracking-widest py-1.5 px-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                Sign Out
+                            </button>
+                        </div>
+                        
+                        <hr class="border-neutral-800" />
+                        
+                        <!-- Preferences & Auto Save Toggle -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-bold text-neutral-300 block">Milestone Auto-Backup</span>
+                                <span class="text-[9px] text-neutral-500 block uppercase tracking-wider mt-0.5">Save on end/edit/delete</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer select-none">
+                                <input type="checkbox" id="gdriveAutoBackupToggle" class="sr-only peer" onchange="GDrive.toggleAutoBackup(this)" checked>
+                                <div class="w-11 h-6 bg-neutral-850 rounded-full peer peer-focus:ring-0 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-neutral-500 peer-checked:after:bg-emerald-400 after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-950/30 peer-checked:border-emerald-500/30 border border-neutral-700"></div>
+                            </label>
+                        </div>
+                        
+                        <!-- Manual Backup Button -->
+                        <button onclick="GDrive.upload(false)" class="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-wider rounded-xl transition active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.2)] text-xs">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            Create New Checkpoint
+                        </button>
+                        
+                        <hr class="border-neutral-800" />
+                        
+                        <!-- Checkpoints Timeline -->
+                        <div>
+                            <span class="text-[10px] font-black text-neutral-500 uppercase tracking-widest block mb-3">Past Checkpoints</span>
+                            <div id="gdriveBackupsList" class="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+                                <!-- Backup items dynamically rendered here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-end mb-4">
+                <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest">Achievements</h3>
+                <span id="achievementCount" class="text-sm font-black text-emerald-400">0/8</span>
+            </div>
+            <div id="achievementsList" class="grid grid-cols-2 gap-3 pb-8"></div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/planner.js"></script>
+    <script src="js/chart.js"></script>
+    <script src="js/gdrive.js"></script>
+</body>
+
+</html>
