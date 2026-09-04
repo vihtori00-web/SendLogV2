@@ -1,0 +1,17 @@
+{
+  "name": "SendLog v2 - Bouldering & Coach",
+  "short_name": "SendLog v2",
+  "description": "A powerful bouldering tracker and AI session planner for climbers.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "app_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
