@@ -745,6 +745,29 @@ const Planner = (function () {
             };
         }
 
+        // 5. WARMUP STRUGGLE / MULTIPLE ATTEMPTS
+        const isWarmupPhase = phaseTitle.includes('warmup') || phaseTitle.includes('movement');
+        if (isWarmupPhase) {
+            const heavyWarmup = phaseClimbs.find(c => (c.tries && c.tries >= 2) || c.statusText === 'Project');
+            if (heavyWarmup) {
+                return {
+                    id: `warmup_struggle_${heavyWarmup.id}`,
+                    type: 'warmup_struggle',
+                    title: '⚠️ Warmup Taking Extra Burns',
+                    message: `Warmup problem took ${heavyWarmup.tries} attempt${heavyWarmup.tries > 1 ? 's' : ''}. Connective tissues need extra time to warm up. Take 2m rest before ramping up intensity.`,
+                    badgeColor: 'amber',
+                    actions: [
+                        {
+                            label: '⏱️ +2m Warmup Rest',
+                            action: 'add_rest',
+                            restSeconds: 120,
+                            primary: true
+                        }
+                    ]
+                };
+            }
+        }
+
         return null;
     }
 
