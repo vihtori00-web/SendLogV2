@@ -338,11 +338,17 @@ const Planner = (function () {
         const gradeReadiness = computeGradeReadiness(history, maxGradeIdx);
         const checkin = preSessionCheckin;
 
+        const warmupBaseIdx = Math.max(0, maxGradeIdx - 4);
+        const volumeGradeIdx = Math.max(0, maxGradeIdx - 2);
+        const subMaxGradeIdx = Math.max(0, maxGradeIdx - 1);
+        const projectTargetIdx = gradeReadiness.readyForBreakthrough ? Math.min(GRADES.length - 1, maxGradeIdx + 1) : maxGradeIdx;
+
         const maxGradeStr = GRADES[maxGradeIdx] || '6C';
-        const subMaxGradeStr = GRADES[Math.max(0, maxGradeIdx - 1)];
-        const volumeGradeStr = GRADES[Math.max(0, maxGradeIdx - 2)];
-        const warmupBaseStr = GRADES[Math.max(0, maxGradeIdx - 4)];
+        const subMaxGradeStr = GRADES[subMaxGradeIdx];
+        const volumeGradeStr = GRADES[volumeGradeIdx];
+        const warmupBaseStr = GRADES[warmupBaseIdx];
         const nextGradeStr = GRADES[Math.min(GRADES.length - 1, maxGradeIdx + 1)];
+        const projectTargetStr = GRADES[projectTargetIdx];
 
         let baseReadiness = 85;
         if (workload.statusCategory === 'high_risk') baseReadiness = 30;
@@ -376,9 +382,36 @@ const Planner = (function () {
                 ? 'Tweaky fingers reported. Prioritize tendon health to prevent pulley injury.'
                 : 'Acute fatigue spike detected. Climbing today risks acute injury with negative training yield.';
             phases = [
-                { name: 'Zero Climbing', desc: 'No hanging or climbing. Allow tendon collagen to rebuild.' },
-                { name: 'Antagonist Care (15m)', desc: 'Reverse wrist curls, pushups, finger extensor bands (3x15).' },
-                { name: 'Mobility & Hips (15m)', desc: 'Hip openers, thoracic spine rotations, shoulder dislocates.' }
+                {
+                    name: 'Zero Climbing',
+                    title: 'Rest & Recover',
+                    desc: 'No hanging or climbing. Allow tendon collagen to rebuild.',
+                    durationMinutes: 0,
+                    restSeconds: 0,
+                    targetGradeIdx: null,
+                    targetGradeStr: null,
+                    targetTags: []
+                },
+                {
+                    name: 'Antagonist Care (15m)',
+                    title: 'Antagonist Care',
+                    desc: 'Reverse wrist curls, pushups, finger extensor bands (3x15).',
+                    durationMinutes: 15,
+                    restSeconds: 60,
+                    targetGradeIdx: null,
+                    targetGradeStr: null,
+                    targetTags: []
+                },
+                {
+                    name: 'Mobility & Hips (15m)',
+                    title: 'Mobility & Hips',
+                    desc: 'Hip openers, thoracic spine rotations, shoulder dislocates.',
+                    durationMinutes: 15,
+                    restSeconds: 60,
+                    targetGradeIdx: null,
+                    targetGradeStr: null,
+                    targetTags: []
+                }
             ];
             exitRule = 'Rest day complete. Stay hydrated and get 8h sleep.';
         } else if (compositeScore < 65 || tendon.recoveryPct < 80) {
@@ -391,9 +424,36 @@ const Planner = (function () {
             targetTags = ['slab', 'sloper', 'technical', 'pinch'];
             forbiddenTags = ['crimp', 'board'];
             phases = [
-                { name: 'Warmup (20m)', desc: `Build gradually from ${warmupBaseStr} to ${volumeGradeStr}. Focus on silent feet.` },
-                { name: 'Volume Circuit (45m)', desc: `Complete 8–12 boulders strictly at ${volumeGradeStr} and ${subMaxGradeStr}. Rest 2 min between sends.` },
-                { name: 'Technical Drill (15m)', desc: 'Practice 3 slab or dynamic balance boulders with zero re-gripping.' }
+                {
+                    name: 'Warmup (20m)',
+                    title: 'Movement Warmup',
+                    desc: `Build gradually from ${warmupBaseStr} to ${volumeGradeStr}. Focus on silent feet and precision.`,
+                    durationMinutes: 20,
+                    restSeconds: 60,
+                    targetGradeIdx: warmupBaseIdx,
+                    targetGradeStr: warmupBaseStr,
+                    targetTags: ['slab', 'sloper']
+                },
+                {
+                    name: 'Volume Circuit (45m)',
+                    title: 'Volume Circuit',
+                    desc: `Complete 8–12 boulders strictly at ${volumeGradeStr} and ${subMaxGradeStr}. Rest 2 min between sends.`,
+                    durationMinutes: 45,
+                    restSeconds: 120,
+                    targetGradeIdx: volumeGradeIdx,
+                    targetGradeStr: volumeGradeStr,
+                    targetTags: ['sloper', 'pinch', 'technical']
+                },
+                {
+                    name: 'Technical Drill (15m)',
+                    title: 'Technical Drill',
+                    desc: 'Practice 3 slab or dynamic balance boulders with zero re-gripping.',
+                    durationMinutes: 15,
+                    restSeconds: 90,
+                    targetGradeIdx: subMaxGradeIdx,
+                    targetGradeStr: subMaxGradeStr,
+                    targetTags: ['slab', 'technical']
+                }
             ];
             exitRule = 'End session as soon as pump outlasts 2 minutes or form degrades.';
         } else if (checkin.time <= 45) {
@@ -402,23 +462,85 @@ const Planner = (function () {
             badgeColor = 'blue';
             rationale = 'Short time window (45m). Optimize for rapid movement density and warmup efficiency.';
             phases = [
-                { name: 'Dynamic Warmup (10m)', desc: `Continuous climbing on ${warmupBaseStr} to 5+.` },
-                { name: 'Flash Ladder (25m)', desc: `Attempt 5-6 boulders at ${volumeGradeStr} to ${subMaxGradeStr} with 90s rest.` },
-                { name: 'Power Burn (10m)', desc: `2 crisp burns on a familiar ${maxGradeStr}.` }
+                {
+                    name: 'Dynamic Warmup (10m)',
+                    title: 'Dynamic Warmup',
+                    desc: `Continuous easy movement on ${warmupBaseStr} to 5+.`,
+                    durationMinutes: 10,
+                    restSeconds: 60,
+                    targetGradeIdx: warmupBaseIdx,
+                    targetGradeStr: warmupBaseStr,
+                    targetTags: ['dynamic']
+                },
+                {
+                    name: 'Flash Ladder (25m)',
+                    title: 'Flash Ladder',
+                    desc: `Attempt 5-6 boulders at ${volumeGradeStr} to ${subMaxGradeStr} with 90s rest.`,
+                    durationMinutes: 25,
+                    restSeconds: 90,
+                    targetGradeIdx: volumeGradeIdx,
+                    targetGradeStr: volumeGradeStr,
+                    targetTags: ['powerful', 'dynamic']
+                },
+                {
+                    name: 'Power Burn (10m)',
+                    title: 'Power Burn',
+                    desc: `2 crisp burns on a familiar ${maxGradeStr}.`,
+                    durationMinutes: 10,
+                    restSeconds: 180,
+                    targetGradeIdx: maxGradeIdx,
+                    targetGradeStr: maxGradeStr,
+                    targetTags: ['powerful', 'crimp']
+                }
             ];
             exitRule = 'Stop at minute 45 sharp.';
         } else {
             mode = 'LIMIT';
-            const projectTarget = gradeReadiness.readyForBreakthrough ? nextGradeStr : maxGradeStr;
-            title = `🚀 Limit Projecting (${projectTarget})`;
+            title = `🚀 Limit Projecting (${projectTargetStr})`;
             badgeColor = 'emerald';
             rationale = `Fresh condition (ACWR ${workload.acwr}) and fully recovered tendons. Ideal window for maximum recruitment and neurological adaptation.`;
             targetTags = ['crimp', 'board', 'powerful', 'technical'];
             phases = [
-                { name: 'Warmup Pyramid (25m)', desc: `1x ${warmupBaseStr}, 2x ${volumeGradeStr}, 1x ${subMaxGradeStr}. Full 3m rest after last warmup.` },
-                { name: 'CNS Priming (10m)', desc: `1 high-effort flash attempt on ${subMaxGradeStr} to activate recruitment.` },
-                { name: 'Limit Project Phase (40m)', desc: `Work 1 specific project at ${projectTarget}. Take 3–4 minutes full rest between burns. Max 5 burns total.` },
-                { name: 'Cool Down (10m)', desc: '2 very easy slabs below 5+ and light antagonist stretching.' }
+                {
+                    name: 'Warmup Pyramid (25m)',
+                    title: 'Warmup Pyramid',
+                    desc: `1x ${warmupBaseStr}, 2x ${volumeGradeStr}, 1x ${subMaxGradeStr}. Full 3m rest after last warmup.`,
+                    durationMinutes: 25,
+                    restSeconds: 90,
+                    targetGradeIdx: warmupBaseIdx,
+                    targetGradeStr: warmupBaseStr,
+                    targetTags: ['slab', 'sloper']
+                },
+                {
+                    name: 'CNS Priming (10m)',
+                    title: 'CNS Priming',
+                    desc: `1 high-effort flash attempt on ${subMaxGradeStr} to activate recruitment.`,
+                    durationMinutes: 10,
+                    restSeconds: 120,
+                    targetGradeIdx: subMaxGradeIdx,
+                    targetGradeStr: subMaxGradeStr,
+                    targetTags: ['powerful', 'crimp']
+                },
+                {
+                    name: 'Limit Project Phase (40m)',
+                    title: 'Limit Project Phase',
+                    desc: `Work 1 specific project at ${projectTargetStr}. Take 3–4 minutes full rest between burns. Max 5 burns total.`,
+                    durationMinutes: 40,
+                    restSeconds: 210,
+                    targetGradeIdx: projectTargetIdx,
+                    targetGradeStr: projectTargetStr,
+                    targetTags: ['crimp', 'board', 'powerful']
+                },
+                {
+                    name: 'Cool Down (10m)',
+                    title: 'Cool Down',
+                    desc: '2 very easy slabs below 5+ and light antagonist stretching.',
+                    durationMinutes: 10,
+                    restSeconds: 60,
+                    targetGradeIdx: warmupBaseIdx,
+                    targetGradeStr: warmupBaseStr,
+                    targetTags: ['slab', 'sloper']
+                }
             ];
             exitRule = 'Steve Bechtel Rule of 3: Stop projecting immediately if you fail 2 times below your previous high point.';
         }
@@ -506,6 +628,12 @@ const Planner = (function () {
         return { ...preSessionCheckin };
     }
 
+    function getTodayPlan() {
+        const history = JSON.parse(localStorage.getItem('boulderHistory')) || [];
+        const maxGradeIdx = parseInt(localStorage.getItem('boulderMaxGradeIndex')) || 14;
+        return generateDailyPlan(history, maxGradeIdx);
+    }
+
     return {
         GRADES,
         STYLE_STRESS,
@@ -514,6 +642,7 @@ const Planner = (function () {
         computeTendonRecovery,
         computeGradeReadiness,
         generateDailyPlan,
+        getTodayPlan,
         evaluateLiveFatigue,
         recordFeedback,
         setCheckin,
@@ -577,12 +706,29 @@ function renderPlannerUI() {
             phasesContainer.innerHTML = plan.phases.map((p, idx) => `
                 <div class="flex items-start gap-3 bg-neutral-900/70 p-3 rounded-2xl border border-neutral-800">
                     <span class="w-6 h-6 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-black text-neutral-400 shrink-0 mt-0.5">${idx + 1}</span>
-                    <div class="flex-1">
-                        <p class="text-xs font-bold text-white">${p.name}</p>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-xs font-bold text-white">${p.name}</p>
+                            ${p.targetGradeStr ? `<span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 shrink-0">Target: ${p.targetGradeStr}</span>` : ''}
+                        </div>
                         <p class="text-[11px] text-neutral-400 leading-snug mt-0.5">${p.desc}</p>
+                        ${p.targetTags && p.targetTags.length > 0 ? `
+                        <div class="flex gap-1 mt-1.5 flex-wrap">
+                            ${p.targetTags.map(t => `<span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">${t}</span>`).join('')}
+                        </div>` : ''}
                     </div>
                 </div>
             `).join('');
+        }
+
+        // Update Today's Coach Card in Session Tab
+        const scTitle = document.getElementById('sessionCardCoachTitle');
+        const scSub = document.getElementById('sessionCardCoachSubtitle');
+        if (scTitle) scTitle.innerText = plan.title;
+        if (scSub) {
+            const firstTarget = plan.phases.find(p => p.targetGradeStr);
+            const gradeInfo = firstTarget ? ` · Target ${firstTarget.targetGradeStr}` : '';
+            scSub.innerText = `${plan.phases.length} Guided Phases${gradeInfo} · Tap to start`;
         }
 
         // Target / Forbidden Tags
