@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sendlog-v2-0';
+const CACHE_NAME = 'sendlog-v2-2';
 const ASSETS = [
   './',
   'index.html',
@@ -8,13 +8,22 @@ const ASSETS = [
   'js/app.js',
   'js/chart.js',
   'js/gdrive.js',
-  'js/planner.js'
+  'js/planner.js',
+  'https://cdn.tailwindcss.com',
+  'https://cdn.jsdelivr.net/npm/chart.js',
+  'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const asset of ASSETS) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.warn('[SW] Failed to cache asset:', asset, err);
+        }
+      }
     })
   );
   self.skipWaiting();
@@ -34,30 +43,55 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip caching for external API calls (Dreamlo/Codetabs)
-  if (url.hostname.includes('codetabs.com')) {
-    event.respondWith(fetch(event.request));
+  // Skip caching for external API calls, Google Identity, and Dreamlo/CORS proxies
+  if (
+    url.hostname.includes('dreamlo.com') ||
+    url.hostname.includes('sirjosh.workers.dev') ||
+    url.hostname.includes('cors.sh') ||
+    url.hostname.includes('codetabs.com') ||
+    url.hostname.includes('accounts.google.com') ||
+    url.hostname.includes('googleapis.com')
+  ) {
     return;
   }
 
-  // Stale-While-Revalidate strategy for internal assets
+  // Stale-While-Revalidate strategy for internal assets and CDNs
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(event.request).then((cachedResponse) => {
-        const fetchPromise = fetch(event.request).then((networkResponse) => {
-          if (networkResponse.ok) {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cachedResponse = await cache.match(event.request);
+
+      const fetchPromise = fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
             cache.put(event.request, networkResponse.clone());
           }
           return networkResponse;
-        }).catch(() => {
-          // Fallback to index.html for navigation if offline
+        })
+        .catch(() => {
           if (event.request.mode === 'navigate') {
             return cache.match('index.html');
           }
+          return null;
         });
 
-        // Return cached response immediately if available, otherwise wait for network
-        return cachedResponse || fetchPromise;
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      const networkResponse = await fetchPromise;
+      if (networkResponse) {
+        return networkResponse;
+      }
+
+      if (event.request.mode === 'navigate') {
+        const fallback = await cache.match('index.html');
+        if (fallback) return fallback;
+      }
+
+      return new Response('Offline: resource not available in cache.', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/plain' }
       });
     })
   );

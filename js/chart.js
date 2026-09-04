@@ -645,7 +645,7 @@
                 gradeLabels.innerHTML = gradeKeys.map((g, i) => {
                     const pct = (gradeCounts[g] / Math.max(1, total)) * 100;
                     const col = barColors[i % barColors.length];
-                    return `<div style="width:${pct}%;overflow:hidden" class="text-[8px] font-black truncate" style="color:${col}">
+                    return `<div style="width:${pct}%;overflow:hidden;color:${col}" class="text-[8px] font-black truncate">
                         <span style="color:${col}">${g}×${gradeCounts[g]}</span>
                     </div>`;
                 }).join('');
@@ -701,7 +701,7 @@
                 localStorage.setItem('boulderHistory', JSON.stringify(boulderHistory));
                 updateAnalytics();
                 renderHistoryList();
-                triggerMilestoneBackup();
+                if (typeof triggerMilestoneBackup === 'function') triggerMilestoneBackup();
             }
         }
 
@@ -812,7 +812,7 @@
             // 4. Update UI
             updateAnalytics();
             renderHistoryList();
-            triggerMilestoneBackup();
+            if (typeof triggerMilestoneBackup === 'function') triggerMilestoneBackup();
 
             // 5. Go back to return from #edit-session state to #session-idx state.
             // The popstate listener will automatically trigger openSessionDetail with the updated data

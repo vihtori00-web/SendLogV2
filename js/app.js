@@ -418,9 +418,8 @@
                 if (!container) return;
                 container.innerHTML = tagList.map(tag => `
                     <button onclick="toggleTag('${tag}')" id="tag-${tag}"
-                        style="width: calc(25% - 0.5rem); min-width: 65px;"
-                        class="py-2.5 rounded-xl border border-neutral-800 text-[10px] font-black uppercase tracking-wider transition-all truncate px-1
-                        ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-neutral-900 text-neutral-500 border-neutral-800'}">
+                        class="py-2 px-1 rounded-xl border text-[10px] font-black uppercase tracking-wider text-center transition-all truncate
+                        ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-sm' : 'bg-neutral-900 border-neutral-800/80 text-neutral-500 hover:text-neutral-400'}">
                         ${tag}
                     </button>
                 `).join('');
@@ -474,7 +473,9 @@
             const toast = document.getElementById('toastAlert');
             if(toast) {
                 document.getElementById('toastTitle').innerText = def.name;
-                confetti({ particleCount: 200, spread: 100, origin: { y: 0.1 }, zIndex: 300, colors: ['#10b981', '#fbbf24', '#ffffff'] });
+                if (typeof confetti === 'function') {
+                    confetti({ particleCount: 200, spread: 100, origin: { y: 0.1 }, zIndex: 300, colors: ['#10b981', '#fbbf24', '#ffffff'] });
+                }
                 toast.classList.remove('-translate-y-[150%]');
                 setTimeout(() => toast.classList.add('-translate-y-[150%]'), 4000);
             }
@@ -482,11 +483,18 @@
         }
 
         function exportData() {
+            let calibData = null;
+            try {
+                const savedCalib = localStorage.getItem('sendlog_v2_calibration');
+                if (savedCalib) calibData = JSON.parse(savedCalib);
+            } catch(e) {}
+
             const data = {
                 history: boulderHistory,
                 maxGradeIndex: localStorage.getItem('boulderMaxGradeIndex'),
                 playerName: localStorage.getItem('boulderPlayerName'),
-                achievements: achievementsUnlocked
+                achievements: achievementsUnlocked,
+                calibration: calibData
             };
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
             const node = document.createElement('a');
@@ -508,9 +516,10 @@
                         localStorage.setItem('boulderHistory', JSON.stringify(data.history));
                         boulderHistory = data.history;
                     }
-                     if (data.maxGradeIndex !== undefined) localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
-                     if (data.playerName) localStorage.setItem('boulderPlayerName', data.playerName);
-                     if (data.achievements) localStorage.setItem('boulderAchievements', JSON.stringify(data.achievements));
+                    if (data.maxGradeIndex !== undefined) localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
+                    if (data.playerName) localStorage.setItem('boulderPlayerName', data.playerName);
+                    if (data.achievements) localStorage.setItem('boulderAchievements', JSON.stringify(data.achievements));
+                    if (data.calibration) localStorage.setItem('sendlog_v2_calibration', JSON.stringify(data.calibration));
                     window.location.reload();
                 } catch (err) { alert("Failed to parse Backup file."); }
             };
@@ -556,8 +565,8 @@
             if (sessionStartTime) return; 
             sessionStartTime = Date.now();
             saveActiveSession();
-            DOM.sessionTimerStr.classList.remove('hidden');
-            DOM.sessionScoreStr.classList.add('animate-score-pulse');
+            if (DOM.sessionTimerStr) DOM.sessionTimerStr.classList.remove('hidden');
+            if (DOM.sessionScoreStr) DOM.sessionScoreStr.classList.add('animate-score-pulse');
             sessionTimerInterval = setInterval(updateSessionTimer, 1000);
             updateSessionTimer();
             
@@ -664,39 +673,40 @@
         const elGrade = document.getElementById('displayGrade');
         const elTries = document.getElementById('displayTries');
         const btnTop = document.getElementById('btnTop');
-        const btnFlash = document.getElementById('btnFlash');
         const btnSubmit = document.getElementById('mainAddButton');
         const selectMax = document.getElementById('vMax');
+
+        let flashManuallyDisabled = false;
 
         renderMaxGradeSelect();
         renderTags();
 
         elGrade.innerText = fontGrades[currentGradeIndex];
+        updateUI();
+        updateSubmitButtonLabel();
 
         // -- LOGIC: INPUT --
         function adjGrade(dir) {
-            if (trainingActive && (trainingState === 'prepare' || trainingState === 'climb' || trainingState === 'rest')) {
-                if ('vibrate' in navigator) navigator.vibrate(30);
-                const elGrade = document.getElementById('displayGrade');
-                elGrade.classList.add('text-orange-500', 'scale-105');
-                setTimeout(() => elGrade.classList.remove('text-orange-500', 'scale-105'), 300);
-                return;
-            }
             if ('vibrate' in navigator) navigator.vibrate(15);
             currentGradeIndex = Math.max(0, Math.min(fontGrades.length - 1, currentGradeIndex + dir));
             elGrade.innerText = fontGrades[currentGradeIndex];
+            checkIntraSessionAdaptation();
         }
 
         function quickRecordBurn() {
             if ('vibrate' in navigator) navigator.vibrate(25);
             tries = Math.max(1, tries + 1);
             if (elTries) elTries.innerText = tries;
+            if (isTop && tries > 1) {
+                isFlash = false;
+            }
 
             // Automatically trigger coach rest timer when resting between burns
             if (trainingActive && !coachRestTimerInterval) {
                 toggleCoachRestTimer();
             }
 
+            updateUI();
             updateSubmitButtonLabel();
             checkIntraSessionAdaptation();
         }
@@ -706,22 +716,31 @@
             const btn = document.getElementById('mainAddButton');
             if (!btn) return;
             if (isFlash) {
-                btn.innerText = `⚡ LOG FLASH (+PTS)`;
-                btn.className = 'w-full h-[4.5rem] rounded-[2rem] bg-amber-500 text-black font-black uppercase tracking-[0.2em] text-lg shadow-xl shadow-amber-500/20 active:scale-95 transition-all outline-none';
+                btn.innerHTML = `<span>⚡</span><span>LOG FLASH (+PTS)</span>`;
+                btn.className = 'w-full h-14 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black uppercase tracking-[0.2em] text-sm shadow-xl shadow-amber-500/20 active:scale-95 transition-all outline-none flex items-center justify-center gap-2';
             } else if (isTop) {
-                btn.innerText = `🧗 LOG SEND (${tries} ${tries > 1 ? 'TRIES' : 'TRY'})`;
-                btn.className = 'w-full h-[4.5rem] rounded-[2rem] bg-emerald-500 text-black font-black uppercase tracking-[0.2em] text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none';
+                btn.innerHTML = `<span>🧗</span><span>LOG SEND (${tries} ${tries > 1 ? 'TRIES' : 'TRY'})</span>`;
+                btn.className = 'w-full h-14 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.2em] text-sm shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none flex items-center justify-center gap-2';
             } else {
-                btn.innerText = `🛑 LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})`;
-                btn.className = 'w-full h-[4.5rem] rounded-[2rem] bg-neutral-800 text-neutral-300 font-black uppercase tracking-[0.2em] text-base border border-neutral-700 active:scale-95 transition-all outline-none';
+                btn.innerHTML = `<span>🛑</span><span>LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})</span>`;
+                btn.className = 'w-full h-14 rounded-2xl bg-neutral-900 border border-neutral-700 text-neutral-300 font-black uppercase tracking-[0.15em] text-xs active:scale-95 transition-all outline-none flex items-center justify-center gap-2';
             }
         }
 
         function adjTries(dir) {
             if ('vibrate' in navigator) navigator.vibrate(15);
-            if (isFlash) return;
             tries = Math.max(1, tries + dir);
-            elTries.innerText = tries;
+            if (elTries) elTries.innerText = tries;
+            if (isTop) {
+                if (tries === 1 && !flashManuallyDisabled) {
+                    isFlash = true;
+                } else {
+                    isFlash = false;
+                }
+            } else {
+                isFlash = false;
+            }
+            updateUI();
             updateSubmitButtonLabel();
             checkIntraSessionAdaptation();
         }
@@ -729,35 +748,77 @@
         function toggleTop() {
             if ('vibrate' in navigator) navigator.vibrate(15);
             isTop = !isTop;
-            if (!isTop) { isFlash = false; }
-            updateUI();
-            updateSubmitButtonLabel();
-            checkIntraSessionAdaptation();
-        }
-
-        function toggleFlash() {
-            if ('vibrate' in navigator) navigator.vibrate(15);
-            isFlash = !isFlash;
-            if (isFlash) {
-                isTop = true;
-                tries = 1;
-                elTries.innerText = 1;
+            if (isTop) {
+                if (tries === 1 && !flashManuallyDisabled) {
+                    isFlash = true;
+                } else {
+                    isFlash = false;
+                }
+            } else {
+                isFlash = false;
+                flashManuallyDisabled = false;
             }
             updateUI();
             updateSubmitButtonLabel();
             checkIntraSessionAdaptation();
         }
+        window.toggleTop = toggleTop;
+
+        function toggleFlashOverride(event) {
+            if (event) event.stopPropagation();
+            if ('vibrate' in navigator) navigator.vibrate(15);
+            if (!isTop || tries !== 1) return;
+            isFlash = !isFlash;
+            flashManuallyDisabled = !isFlash;
+            updateUI();
+            updateSubmitButtonLabel();
+            checkIntraSessionAdaptation();
+        }
+        window.toggleFlashOverride = toggleFlashOverride;
+
+        function toggleFlash() {
+            if ('vibrate' in navigator) navigator.vibrate(15);
+            if (!isTop) {
+                isTop = true;
+                tries = 1;
+                if (elTries) elTries.innerText = 1;
+                isFlash = true;
+                flashManuallyDisabled = false;
+            } else {
+                toggleFlashOverride();
+            }
+            updateUI();
+            updateSubmitButtonLabel();
+            checkIntraSessionAdaptation();
+        }
+        window.toggleFlash = toggleFlash;
 
         function updateUI() {
-            const base = "flex-1 rounded-[1.8rem] border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback";
-            
-            btnTop.className = isTop
-                ? `${base} bg-blue-500/20 text-blue-400 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]`
-                : `${base} bg-neutral-900 border-neutral-800 text-neutral-500`;
+            const btn = document.getElementById('btnTop');
+            if (btn) {
+                if (!isTop) {
+                    btn.className = "rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm haptic-feedback";
+                    btn.innerHTML = `<span>🧗</span><span>Topped?</span>`;
+                } else if (isFlash) {
+                    btn.className = "rounded-2xl bg-gradient-to-r from-amber-500/20 to-yellow-500/15 border border-amber-500/60 text-amber-300 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.15)] haptic-feedback";
+                    btn.innerHTML = `<span>⚡</span><span>Flash!</span><span onclick="toggleFlashOverride(event)" title="Switch to regular send" class="ml-1 px-1.5 py-0.5 rounded-md bg-amber-500/30 text-[9px] text-amber-200 hover:bg-amber-500/50 border border-amber-400/40">Undo</span>`;
+                } else {
+                    btn.className = "rounded-2xl bg-gradient-to-r from-emerald-500/20 to-teal-500/15 border border-emerald-500/60 text-emerald-300 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.15)] haptic-feedback";
+                    if (tries === 1) {
+                        btn.innerHTML = `<span>🧗</span><span>Sent (1 try)</span><span onclick="toggleFlashOverride(event)" title="Mark as flash" class="ml-1 px-1.5 py-0.5 rounded-md bg-neutral-800 text-[9px] text-neutral-300 hover:text-amber-300 border border-neutral-700">⚡ Flash?</span>`;
+                    } else {
+                        btn.innerHTML = `<span>🧗</span><span>Sent (${tries} tries)</span>`;
+                    }
+                }
+            }
 
-            btnFlash.className = isFlash
-                ? `${base} bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]`
-                : `${base} bg-neutral-900 border-neutral-800 text-neutral-500`;
+            // Safe fallback if legacy btnFlash element is ever rendered
+            const btnF = document.getElementById('btnFlash');
+            if (btnF) {
+                btnF.className = isFlash
+                    ? "flex-1 rounded-[1.8rem] border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+                    : "flex-1 rounded-[1.8rem] border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback bg-neutral-900 border-neutral-800 text-neutral-500";
+            }
         }
 
         function toggleTag(tag) {
@@ -793,11 +854,6 @@
         }
 
         function logClimb() {
-            if (trainingActive && trainingState === 'prepare' && currentGradeIndex === trainingCurrentGradeIndex && (isTop || isFlash)) {
-                alert("Please start the 5-minute timer before logging your training send!");
-                return;
-            }
-
             if ('vibrate' in navigator) navigator.vibrate(50);
             const delta = currentGradeIndex - maxGradeIndex;
             const points = calculatePoints(delta, isFlash, isTop, tries);
@@ -813,7 +869,8 @@
                 if (isFlash && delta === 0) unlockAchievement('the_flash');
                 if (delta > 0) unlockAchievement('crusher');
                 if (tries >= 5) unlockAchievement('dedication');
-                if (getTotalScore() + points >= 1000) unlockAchievement('centurion');
+                const totalScoreNow = typeof getTotalScore === 'function' ? getTotalScore() : sessionScore;
+                if (totalScoreNow + points >= 1000) unlockAchievement('centurion');
 
                 if (currentGradeIndex > maxGradeIndex) {
                     maxGradeIndex = currentGradeIndex;
@@ -821,14 +878,18 @@
                     localStorage.setItem('boulderMaxGradeIndex', maxGradeIndex);
                     
                     // Cool animation for new max grade
-                    confetti({ particleCount: 300, spread: 160, origin: { y: 0.5 }, startVelocity: 45, colors: ['#ff0000', '#00ff00', '#3b82f6', '#fbbf24', '#10b981'] });
+                    if (typeof confetti === 'function') {
+                        confetti({ particleCount: 300, spread: 160, origin: { y: 0.5 }, startVelocity: 45, colors: ['#ff0000', '#00ff00', '#3b82f6', '#fbbf24', '#10b981'] });
+                    }
                     const displayGradeEl = document.getElementById('displayGrade');
                     displayGradeEl.classList.add('scale-150', 'text-amber-400', 'drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]');
                     setTimeout(() => {
                         displayGradeEl.classList.remove('scale-150', 'text-amber-400', 'drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]');
                     }, 1200);
                 } else if (delta === 0) {
-                    confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 }, colors: ['#10b981'] });
+                    if (typeof confetti === 'function') {
+                        confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 }, colors: ['#10b981'] });
+                    }
                 }
             }
 
@@ -873,8 +934,8 @@
             btnSubmit.classList.add('bg-emerald-400', 'text-black', 'border-emerald-400');
 
             setTimeout(() => {
-                btnSubmit.innerText = `LOG CLIMB`;
                 btnSubmit.classList.remove('bg-emerald-400', 'text-black', 'border-emerald-400');
+                updateSubmitButtonLabel();
             }, 800);
 
             selectedTags = [];
@@ -882,9 +943,9 @@
             if (elTries) elTries.innerText = 1;
             isTop = false;
             isFlash = false;
+            flashManuallyDisabled = false;
             updateUI();
             renderTags();
-            updateSubmitButtonLabel();
 
             // Training Mode: check if this climb completes a rung
             if (trainingActive && trainingState === 'climb'
@@ -1476,6 +1537,7 @@
             localStorage.removeItem('boulderActiveSession');
 
             if (boulderHistory.length >= 5) unlockAchievement('consistency');
+            if (durationSeconds >= 10800) unlockAchievement('marathon');
 
             // Calculate Summary Stats
             let bestScore = -1;
@@ -1548,7 +1610,7 @@
             renderHistoryList();
             if (typeof renderPlannerUI === 'function') renderPlannerUI();
             switchTab('history');
-            triggerMilestoneBackup();
+            if (typeof triggerMilestoneBackup === 'function') triggerMilestoneBackup();
         }
 
         function switchTab(tabId, push = true) {
@@ -1643,4 +1705,37 @@
                 if(el) tabObserver.observe(el);
             });
         }, 100);
+
+        function bootApp() {
+            try {
+                // Display version dynamically
+                document.querySelectorAll('.app-version-text').forEach(el => el.innerText = APP_VERSION);
+                const refreshTextEl = document.getElementById('hardRefreshText');
+                if (refreshTextEl) refreshTextEl.innerText = `Hard Refresh (${APP_VERSION})`;
+
+                renderAchievements();
+                renderTags();
+                renderMaxGradeSelect();
+                loadActiveSession();
+                updateUI();
+                updateSubmitButtonLabel();
+
+                if (typeof updateAnalytics === 'function') updateAnalytics();
+                if (typeof renderHistoryList === 'function') renderHistoryList();
+                if (typeof renderPlannerUI === 'function') renderPlannerUI();
+
+                // Sanity check for achievements
+                if (boulderHistory && boulderHistory.length >= 5) unlockAchievement('consistency');
+                const score = typeof getTotalScore === 'function' ? getTotalScore() : 0;
+                if (score >= 1000) unlockAchievement('centurion');
+            } catch (e) {
+                console.error("App boot sequence failed:", e);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootApp);
+        } else {
+            bootApp();
+        }
 

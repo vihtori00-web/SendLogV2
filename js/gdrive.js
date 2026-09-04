@@ -284,11 +284,18 @@
                 if (!silent) this.showLoadingOverlay("Saving Checkpoint...");
 
                 try {
+                    let calibData = null;
+                    try {
+                        const savedCalib = localStorage.getItem('sendlog_v2_calibration');
+                        if (savedCalib) calibData = JSON.parse(savedCalib);
+                    } catch(e) {}
+
                     const payload = {
                         history: boulderHistory,
                         maxGradeIndex: localStorage.getItem('boulderMaxGradeIndex') || '14',
                         playerName: localStorage.getItem('boulderPlayerName') || '',
-                        achievements: achievementsUnlocked
+                        achievements: achievementsUnlocked,
+                        calibration: calibData
                     };
 
                     const timestamp = Date.now();
@@ -397,6 +404,7 @@
                     if (data.maxGradeIndex !== undefined) localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
                     if (data.playerName) localStorage.setItem('boulderPlayerName', data.playerName);
                     if (data.achievements) localStorage.setItem('boulderAchievements', JSON.stringify(data.achievements));
+                    if (data.calibration) localStorage.setItem('sendlog_v2_calibration', JSON.stringify(data.calibration));
 
                     this.showToast("Success", "Restored successfully! Reloading...", "🟢");
                     setTimeout(() => {
@@ -587,26 +595,13 @@
                 GDrive.upload(true);
             }
         }
+        window.triggerMilestoneBackup = triggerMilestoneBackup;
+        window.GDrive = GDrive;
 
-
-        // Init on load with safety guards
+        // Auto-initialize Google Drive connection
         try {
-            // Display version dynamically
-            document.querySelectorAll('.app-version-text').forEach(el => el.innerText = APP_VERSION);
-            const refreshTextEl = document.getElementById('hardRefreshText');
-            if (refreshTextEl) refreshTextEl.innerText = `Hard Refresh (${APP_VERSION})`;
-
-            updateAnalytics();
-            renderHistoryList();
-            loadActiveSession();
-            renderAchievements();
-            renderTags();
             GDrive.checkConnection();
             GDrive.initGIS();
-
-            // Final sanity check for achievements
-            if (boulderHistory && boulderHistory.length >= 5) unlockAchievement('consistency');
-            if (getTotalScore() >= 10000) unlockAchievement('centurion');
         } catch (e) {
-            console.error("App boot sequence failed:", e);
+            console.warn("GDrive init deferred/failed:", e);
         }

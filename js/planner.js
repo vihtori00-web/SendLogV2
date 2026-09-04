@@ -1010,9 +1010,9 @@ function renderPlannerUI() {
                 if (checkin.fingers === f) {
                     btn.classList.replace('bg-neutral-900', f === 'tweaky' ? 'bg-red-500/30' : 'bg-emerald-500/30');
                     btn.classList.replace('text-neutral-400', f === 'tweaky' ? 'text-red-400' : 'text-emerald-400');
-                    btn.classList.add('border-emerald-500/50');
+                    btn.classList.add(f === 'tweaky' ? 'border-red-500/50' : 'border-emerald-500/50');
                 } else {
-                    btn.classList.remove('bg-emerald-500/30', 'bg-red-500/30', 'text-emerald-400', 'text-red-400', 'border-emerald-500/50');
+                    btn.classList.remove('bg-emerald-500/30', 'bg-red-500/30', 'text-emerald-400', 'text-red-400', 'border-emerald-500/50', 'border-red-500/50');
                     btn.classList.add('bg-neutral-900', 'text-neutral-400');
                 }
             }

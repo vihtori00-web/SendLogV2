@@ -206,62 +206,70 @@
                     <div id="trainingHUDTimeout" class="hidden"><span id="trainingPeakDisplay"></span></div>
                 </div>
 
-                <!-- Grade Control (Resilient & Non-Squishing) -->
-                <div id="gradeControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center py-2 relative select-none touch-manipulation shadow-md shrink-0">
-                    <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Font Grade</p>
-                    <div class="flex items-center justify-between w-full px-6 min-h-[4rem]">
-                        <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
-                            <span class="text-4xl font-black">&minus;</span>
-                        </button>
-                        <span id="displayGrade" class="text-[clamp(2.5rem,10vw,3.5rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">6A</span>
-                        <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-12 h-12 flex items-center justify-end text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
-                            <span class="text-4xl font-black">+</span>
-                        </button>
+                <!-- Grade & Attempts Dual-Card Grid -->
+                <div class="grid grid-cols-2 gap-3 shrink-0 select-none touch-manipulation">
+                    <!-- Grade Stepper Card -->
+                    <div id="gradeControlContainer" class="bg-neutral-900 rounded-3xl border border-neutral-800 flex flex-col items-center justify-between p-3 relative shadow-md">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">Font Grade</span>
+                        <div class="flex items-center justify-between w-full mt-1">
+                            <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
+                                <span class="text-2xl font-black leading-none">&minus;</span>
+                            </button>
+                            <span id="displayGrade" class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">6A</span>
+                            <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
+                                <span class="text-2xl font-black leading-none">+</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Attempts Stepper Card -->
+                    <div id="attemptsControlContainer" class="bg-neutral-900 rounded-3xl border border-neutral-800 flex flex-col items-center justify-between p-3 relative shadow-md">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] pointer-events-none">Attempts</span>
+                        <div class="flex items-center justify-between w-full mt-1">
+                            <button onclick="adjTries(-1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
+                                <span class="text-2xl font-black leading-none">&minus;</span>
+                            </button>
+                            <span id="displayTries" class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">1</span>
+                            <button onclick="adjTries(1)" class="w-10 h-10 rounded-xl bg-neutral-800/80 active:bg-neutral-700 flex items-center justify-center text-neutral-300 active:text-white transition-all outline-none haptic-feedback">
+                                <span class="text-2xl font-black leading-none">+</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Attempts Control (Resilient & Non-Squishing) -->
-                <div id="attemptsControlContainer" class="bg-neutral-900 overflow-hidden rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-center p-3 relative select-none touch-manipulation shadow-md shrink-0">
-                    <p class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 pointer-events-none">Attempts</p>
-                    <div class="flex items-center justify-between w-full px-6 min-h-[3rem]">
-                        <button onclick="adjTries(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
-                            <span class="text-4xl font-black">&minus;</span>
-                        </button>
-                        <span id="displayTries" class="text-[clamp(2rem,9vw,3rem)] font-black tracking-tighter text-white drop-shadow-md leading-none">1</span>
-                        <button onclick="adjTries(1)" class="w-12 h-12 flex items-center justify-end text-neutral-600 active:text-neutral-400 transition-colors outline-none haptic-feedback">
-                            <span class="text-4xl font-black">+</span>
-                        </button>
-                    </div>
-                    <!-- Quick Burn Action -->
-                    <button id="btnQuickBurn" onclick="quickRecordBurn()" class="w-full mt-1.5 py-2 px-3 rounded-xl bg-neutral-800/90 hover:bg-neutral-800 text-neutral-200 active:scale-95 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 border border-neutral-700/80 transition-all shadow-sm">
-                        <span>💥</span>
-                        <span>+1 Burn & Start Rest</span>
-                        <span>⏱️</span>
-                    </button>
-                </div>
-
-                <!-- Status Buttons (Topped / Flash) -->
-                <div id="statusButtonsContainer" class="flex gap-3 shrink-0 h-[3.5rem]">
+                <!-- Actions Row: Send Toggle + Quick Burn & Rest -->
+                <div class="grid grid-cols-2 gap-3 shrink-0 h-12 select-none">
+                    <!-- Send Status Toggle -->
                     <button id="btnTop" onclick="toggleTop()"
-                        class="flex-1 rounded-[1.5rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback">
-                        Topped
+                        class="rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm haptic-feedback">
+                        <span>🧗</span>
+                        <span>Topped?</span>
                     </button>
-                    <button id="btnFlash" onclick="toggleFlash()"
-                        class="flex-1 rounded-[1.5rem] bg-neutral-900 border border-neutral-800 text-neutral-500 font-black uppercase tracking-[0.15em] text-sm flex items-center justify-center transition-all haptic-feedback transition-transform">
-                        Flash
+
+                    <!-- Quick Burn Action -->
+                    <button id="btnQuickBurn" onclick="quickRecordBurn()"
+                        class="rounded-2xl bg-neutral-900 hover:bg-neutral-800/80 border border-neutral-800 active:border-orange-500/40 text-neutral-200 font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm haptic-feedback">
+                        <span>⏱️</span>
+                        <span>+1 Burn & Rest</span>
                     </button>
                 </div>
 
-                <!-- Style Tags Container -->
-                <div id="tagContainer" class="flex flex-wrap justify-center gap-2 mt-1 shrink-0 px-2 lg:px-4">
-                    <!-- Dynamic style tags go here -->
+                <!-- Style Tags Container (Compact 4x2 Grid) -->
+                <div class="shrink-0 flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between px-1">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-[0.2em]">Style Tags</span>
+                    </div>
+                    <div id="tagContainer" class="grid grid-cols-4 gap-1.5">
+                        <!-- Dynamic style tags injected by renderTags() -->
+                    </div>
                 </div>
 
-                <!-- Log Climb Button Container (Never Squished) -->
-                <div id="submitButtonContainer" class="pt-2 pb-24 shrink-0">
+                <!-- Log Climb Button Container -->
+                <div id="submitButtonContainer" class="pt-2 pb-4 shrink-0">
                     <button onclick="logClimb()" id="mainAddButton"
-                        class="w-full h-[4.5rem] rounded-[2rem] bg-emerald-500 text-black font-black uppercase tracking-[0.3em] text-xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none">
-                        Log Climb
+                        class="w-full h-14 rounded-2xl bg-neutral-900 border border-neutral-700 text-neutral-300 font-black uppercase tracking-[0.2em] text-sm shadow-lg active:scale-95 transition-all outline-none flex items-center justify-center gap-2">
+                        <span>🧗</span>
+                        <span>Log Climb</span>
                     </button>
                 </div></section>
 
@@ -978,7 +986,7 @@
             
             <button onclick="forceHardRefresh()" class="w-full mt-4 flex items-center justify-center gap-3 p-4 bg-neutral-900 border border-neutral-800 rounded-2xl active:scale-95 transition hover:border-blue-500/50 group mb-6">
                 <svg class="w-6 h-6 text-neutral-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                <span id="hardRefreshText" class="text-sm font-bold text-white">Hard Refresh (v7.4.0)</span>
+                <span id="hardRefreshText" class="text-sm font-bold text-white">Hard Refresh (v2.0.0)</span>
             </button>
 
             <!-- GOOGLE DRIVE CLOUD SYNC -->
@@ -1059,7 +1067,7 @@
 
             <div class="flex justify-between items-end mb-4">
                 <h3 class="text-xs font-black text-neutral-500 uppercase tracking-widest">Achievements</h3>
-                <span id="achievementCount" class="text-sm font-black text-emerald-400">0/8</span>
+                <span id="achievementCount" class="text-sm font-black text-emerald-400">0/12</span>
             </div>
             <div id="achievementsList" class="grid grid-cols-2 gap-3 pb-8"></div>
         </div>
