@@ -909,14 +909,10 @@
                 const glob = getHistoryStats(boulderHistory);
                 const statsText = encodeURIComponent(`${glob.avgGrade}|${glob.avgSends}|${glob.flashRate}`);
 
-                const urlAll   = `https://api.codetabs.com/v1/proxy?quest=http://dreamlo.com/lb/${DREAMLO_PRIVATE_KEY}/add/${nameAll}/${totalScore}/0/${statsText}?t=${Date.now()}`;
-                const urlMonth = `https://api.codetabs.com/v1/proxy?quest=http://dreamlo.com/lb/${DREAMLO_PRIVATE_KEY}/add/${nameMonth}/${monthlyScore}/0/${statsText}?t=${Date.now()}`;
-                const urlWeek  = `https://api.codetabs.com/v1/proxy?quest=http://dreamlo.com/lb/${DREAMLO_PRIVATE_KEY}/add/${nameWeek}/${weeklyScore}/0/${statsText}?t=${Date.now()}`;
-
                 await Promise.all([
-                    fetch(urlAll),
-                    fetch(urlMonth),
-                    fetch(urlWeek)
+                    fetchDreamlo(`/lb/${DREAMLO_PRIVATE_KEY}/add/${nameAll}/${totalScore}/0/${statsText}?t=${Date.now()}`),
+                    fetchDreamlo(`/lb/${DREAMLO_PRIVATE_KEY}/add/${nameMonth}/${monthlyScore}/0/${statsText}?t=${Date.now()}`),
+                    fetchDreamlo(`/lb/${DREAMLO_PRIVATE_KEY}/add/${nameWeek}/${weeklyScore}/0/${statsText}?t=${Date.now()}`)
                 ]);
 
                 btn.innerText = "Synced!";
@@ -930,6 +926,46 @@
             }
         }
 
+        async function fetchDreamlo(path) {
+            const rawUrl = `http://dreamlo.com${path}`;
+            const enc = encodeURIComponent(rawUrl);
+
+            // Resilient candidates in order of preference:
+            // 1. If not on https: (i.e. file: or localhost), direct Dreamlo is fastest and has native CORS headers
+            // 2. High-speed Cloudflare Worker CORS proxy
+            // 3. Secondary proxy fallback
+            const endpoints = [];
+            if (window.location.protocol !== 'https:') {
+                endpoints.push(rawUrl);
+            }
+            endpoints.push(`https://cors-get-proxy.sirjosh.workers.dev/?url=${enc}`);
+            endpoints.push(`https://proxy.cors.sh/${rawUrl}`);
+            if (window.location.protocol === 'https:') {
+                endpoints.push(rawUrl);
+            }
+
+            let lastErr = null;
+            for (const ep of endpoints) {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), 6000);
+                    const res = await fetch(ep, { signal: controller.signal });
+                    clearTimeout(timer);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const text = await res.text();
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        return text;
+                    }
+                } catch (err) {
+                    lastErr = err;
+                    console.warn(`[SendLog] Leaderboard fetch failed via ${ep}:`, err.message);
+                }
+            }
+            throw lastErr || new Error("Leaderboard service temporarily unreachable.");
+        }
+
         async function loadLeaderboard() {
             const listEl = document.getElementById('leaderboardList');
             document.getElementById('syncTotalScore').innerText = lbMode === 'MONTH' ? getMonthlyScore() : lbMode === 'WEEK' ? getWeeklyScore() : getTotalScore();
@@ -939,10 +975,7 @@
                 </div>`;
 
             try {
-                // Fetch from HTTP Dreamlo via codetabs Proxy to bypass SSL and CORS blocks
-                const url = `https://api.codetabs.com/v1/proxy?quest=http://dreamlo.com/lb/${DREAMLO_PUBLIC_KEY}/json?t=${Date.now()}`;
-                const res = await fetch(url);
-                const json = await res.json();
+                const json = await fetchDreamlo(`/lb/${DREAMLO_PUBLIC_KEY}/json?t=${Date.now()}`);
 
                 let data = [];
                 const lb = json?.dreamlo?.leaderboard;
@@ -1063,8 +1096,7 @@
             if (!isAdmin) return;
             if (!confirm("Are you sure you want to permanently delete this score from the global leaderboard?")) return;
             try {
-                const url = `https://api.codetabs.com/v1/proxy?quest=http://dreamlo.com/lb/${DREAMLO_PRIVATE_KEY}/delete/${encodeURIComponent(rawDecodedName)}`;
-                await fetch(url);
+                await fetchDreamlo(`/lb/${DREAMLO_PRIVATE_KEY}/delete/${encodeURIComponent(rawDecodedName)}`);
                 loadLeaderboard();
             } catch (e) {
                 alert("Failed to delete record: " + e.message);
