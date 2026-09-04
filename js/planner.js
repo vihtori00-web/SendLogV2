@@ -607,7 +607,149 @@ const Planner = (function () {
     }
 
     // ------------------------------------------------------------------------
-    // 7. POST-SESSION CALIBRATION FEEDBACK
+    // 7. INTRA-SESSION PERFORMANCE ADAPTATION (Dynamic Coach)
+    // ------------------------------------------------------------------------
+    function evaluateIntraSessionAdaptation(activeClimbs, currentPhaseIndex, coachPlan) {
+        if (!coachPlan || !coachPlan.phases || !coachPlan.phases[currentPhaseIndex]) {
+            return null;
+        }
+
+        const phase = coachPlan.phases[currentPhaseIndex];
+        const phaseTitle = (phase.title || phase.name || '').toLowerCase();
+        const targetGradeIdx = phase.targetGradeIdx;
+        const targetGradeStr = phase.targetGradeStr;
+
+        // Filter climbs logged in this session that belong to this phase or recent climbs
+        const phaseClimbs = (activeClimbs || []).filter(c => {
+            if (c.phaseName) {
+                return c.phaseName.toLowerCase() === (phase.title || phase.name || '').toLowerCase();
+            }
+            return true;
+        });
+
+        if (phaseClimbs.length === 0) return null;
+
+        // 1. EARLY PROJECT SEND (Limit Project Phase)
+        const isProjectPhase = phaseTitle.includes('project') || phaseTitle.includes('limit') || phaseTitle.includes('main');
+        if (isProjectPhase && targetGradeIdx !== null && targetGradeIdx !== undefined) {
+            const sendAtTarget = phaseClimbs.find(c => 
+                (c.statusText === 'Top' || c.statusText === 'Flash') &&
+                GRADES.indexOf(c.gradeStr) >= targetGradeIdx
+            );
+
+            if (sendAtTarget) {
+                const sendGradeIdx = GRADES.indexOf(sendAtTarget.gradeStr);
+                const nextGradeIdx = Math.min(GRADES.length - 1, sendGradeIdx + 1);
+                const nextGradeStr = GRADES[nextGradeIdx];
+
+                if (nextGradeIdx > sendGradeIdx) {
+                    return {
+                        id: `early_send_${sendAtTarget.id}`,
+                        type: 'early_send',
+                        title: '🚀 Project Sent!',
+                        message: `Sent ${sendAtTarget.gradeStr} in ${sendAtTarget.tries} burn${sendAtTarget.tries > 1 ? 's' : ''}! Power reserve is high today.`,
+                        badgeColor: 'emerald',
+                        actions: [
+                            {
+                                label: `🔥 Bump to ${nextGradeStr}`,
+                                action: 'bump_grade',
+                                newGradeIdx: nextGradeIdx,
+                                newGradeStr: nextGradeStr,
+                                primary: true
+                            },
+                            {
+                                label: '🏁 Cool Down',
+                                action: 'advance_phase',
+                                primary: false
+                            }
+                        ]
+                    };
+                }
+            }
+
+            // 2. PROJECT BURN CAP (5 Limit Burns)
+            const totalProjectBurns = phaseClimbs.reduce((acc, c) => acc + (c.tries || 1), 0);
+            if (totalProjectBurns >= 5) {
+                return {
+                    id: `burn_cap_${totalProjectBurns}`,
+                    type: 'burn_cap',
+                    title: '🛑 Limit Burn Cap Reached',
+                    message: `${totalProjectBurns} limit burns logged. Neuromuscular recruitment degrades after 5 max attempts.`,
+                    badgeColor: 'amber',
+                    actions: [
+                        {
+                            label: 'Advance Phase ⏭️',
+                            action: 'advance_phase',
+                            primary: true
+                        }
+                    ]
+                };
+            }
+        }
+
+        // 3. CNS PRIMING STRUGGLE / FAILURE
+        const isPrimingPhase = phaseTitle.includes('priming') || phaseTitle.includes('cns');
+        if (isPrimingPhase && targetGradeIdx !== null && targetGradeIdx !== undefined) {
+            const latestClimb = phaseClimbs[0];
+            if (latestClimb && (latestClimb.statusText === 'Project' || (latestClimb.tries && latestClimb.tries >= 3))) {
+                const softerTargetIdx = Math.max(0, targetGradeIdx - 1);
+                const softerTargetStr = GRADES[softerTargetIdx];
+                return {
+                    id: `priming_struggle_${latestClimb.id}`,
+                    type: 'priming_struggle',
+                    title: '⚠️ Priming Heavy',
+                    message: 'High-threshold recruitment feels sluggish. Ease limit target by -1 to protect fingers and consolidate.',
+                    badgeColor: 'amber',
+                    actions: [
+                        {
+                            label: `🛡️ Adjust Target (${softerTargetStr})`,
+                            action: 'drop_grade',
+                            newGradeIdx: softerTargetIdx,
+                            newGradeStr: softerTargetStr,
+                            primary: true
+                        },
+                        {
+                            label: '⏱️ +2m Rest',
+                            action: 'add_rest',
+                            restSeconds: 120,
+                            primary: false
+                        }
+                    ]
+                };
+            }
+        }
+
+        // 4. RULE OF 3 DETECTED
+        let consecutiveProjectFails = 0;
+        for (let i = 0; i < Math.min(3, phaseClimbs.length); i++) {
+            if (phaseClimbs[i].statusText === 'Project') {
+                consecutiveProjectFails++;
+            } else {
+                break;
+            }
+        }
+        if (consecutiveProjectFails >= 3) {
+            return {
+                id: `rule_of_3_${phaseClimbs[0]?.id}`,
+                type: 'rule_of_3',
+                title: '⚠️ Rule of 3 Triggered',
+                message: '3 consecutive project fails. Fast-twitch power has peaked for this session.',
+                badgeColor: 'amber',
+                actions: [
+                    {
+                        label: 'Advance to Cool Down ⏭️',
+                        action: 'advance_phase',
+                        primary: true
+                    }
+                ]
+            };
+        }
+
+        return null;
+    }
+
+    // ------------------------------------------------------------------------
+    // 8. POST-SESSION CALIBRATION FEEDBACK
     // ------------------------------------------------------------------------
     function recordFeedback(rating) {
         const calib = getCalibration();
@@ -644,6 +786,7 @@ const Planner = (function () {
         generateDailyPlan,
         getTodayPlan,
         evaluateLiveFatigue,
+        evaluateIntraSessionAdaptation,
         recordFeedback,
         setCheckin,
         getCheckin
