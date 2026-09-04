@@ -321,7 +321,7 @@
                 </div>
 
                 <!-- Pre-Session Contextual Modifiers (1-tap chips) -->
-                <div class="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-3.5 space-y-2.5 shadow-sm">
+                <div class="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-3.5 space-y-2.5 shadow-sm shrink-0">
                     <div class="flex justify-between items-center">
                         <span class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Quick Check-in</span>
                         <span class="text-[9px] text-neutral-500">Auto-tunes advice</span>
@@ -341,13 +341,15 @@
                 </div>
 
                 <!-- Daily Readiness Gauge Card -->
-                <div class="bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 rounded-[2rem] p-5 shadow-lg relative overflow-hidden">
-                    <div class="flex justify-between items-start mb-3">
-                        <div>
+                <div class="bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 rounded-[2rem] p-5 shadow-lg relative overflow-hidden shrink-0">
+                    <div class="flex justify-between items-start mb-3 gap-3">
+                        <div class="flex-1 min-w-0">
                             <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Overall Readiness</p>
-                            <h3 id="plannerReadinessTitle" class="text-lg font-black text-white mt-0.5">Calculating...</h3>
+                            <h3 id="plannerReadinessTitle" class="text-base font-black text-white mt-1 leading-snug break-words">Calculating...</h3>
                         </div>
-                        <span id="plannerReadinessScore" class="text-3xl font-black text-emerald-400 tracking-tight">--%</span>
+                        <div class="shrink-0 flex items-center justify-end pl-2">
+                            <span id="plannerReadinessScore" class="text-4xl font-black text-emerald-400 tracking-tight leading-none">--%</span>
+                        </div>
                     </div>
                     
                     <div class="w-full bg-neutral-800 h-2.5 rounded-full overflow-hidden mb-3">
@@ -358,7 +360,7 @@
                 </div>
 
                 <!-- Dual Workload & Tendon Gauges -->
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-3 shrink-0">
                     <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
                         <div class="flex justify-between items-start mb-1">
                             <p class="text-[9px] font-black uppercase tracking-wider text-neutral-500">ACWR (Fatigue)</p>
@@ -383,7 +385,7 @@
                 </div>
 
                 <!-- Today's Structured Session Blueprint -->
-                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-4">
+                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-4 shrink-0">
                     <div class="flex justify-between items-center">
                         <h3 class="text-sm font-black text-white uppercase tracking-wider">Session Blueprint</h3>
                         <button onclick="switchTab('log')" class="text-[10px] font-bold text-emerald-400 hover:underline">Start in Log &rarr;</button>
@@ -406,7 +408,7 @@
                 </div>
 
                 <!-- Grade Breakthrough Readiness Card -->
-                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-3">
+                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-3 shrink-0">
                     <div class="flex justify-between items-start">
                         <div>
                             <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Grade Breakthrough</p>
