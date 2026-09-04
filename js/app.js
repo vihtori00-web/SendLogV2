@@ -687,18 +687,52 @@
             elGrade.innerText = fontGrades[currentGradeIndex];
         }
 
+        function quickRecordBurn() {
+            if ('vibrate' in navigator) navigator.vibrate(25);
+            tries = Math.max(1, tries + 1);
+            if (elTries) elTries.innerText = tries;
+
+            // Automatically trigger coach rest timer when resting between burns
+            if (trainingActive && !coachRestTimerInterval) {
+                toggleCoachRestTimer();
+            }
+
+            updateSubmitButtonLabel();
+            checkIntraSessionAdaptation();
+        }
+        window.quickRecordBurn = quickRecordBurn;
+
+        function updateSubmitButtonLabel() {
+            const btn = document.getElementById('mainAddButton');
+            if (!btn) return;
+            if (isFlash) {
+                btn.innerText = `⚡ LOG FLASH (+PTS)`;
+                btn.className = 'w-full h-[4.5rem] rounded-[2rem] bg-amber-500 text-black font-black uppercase tracking-[0.2em] text-lg shadow-xl shadow-amber-500/20 active:scale-95 transition-all outline-none';
+            } else if (isTop) {
+                btn.innerText = `🧗 LOG SEND (${tries} ${tries > 1 ? 'TRIES' : 'TRY'})`;
+                btn.className = 'w-full h-[4.5rem] rounded-[2rem] bg-emerald-500 text-black font-black uppercase tracking-[0.2em] text-lg shadow-xl shadow-emerald-500/20 active:scale-95 transition-all outline-none';
+            } else {
+                btn.innerText = `🛑 LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})`;
+                btn.className = 'w-full h-[4.5rem] rounded-[2rem] bg-neutral-800 text-neutral-300 font-black uppercase tracking-[0.2em] text-base border border-neutral-700 active:scale-95 transition-all outline-none';
+            }
+        }
+
         function adjTries(dir) {
             if ('vibrate' in navigator) navigator.vibrate(15);
             if (isFlash) return;
             tries = Math.max(1, tries + dir);
             elTries.innerText = tries;
+            updateSubmitButtonLabel();
+            checkIntraSessionAdaptation();
         }
 
         function toggleTop() {
             if ('vibrate' in navigator) navigator.vibrate(15);
             isTop = !isTop;
-            if (!isTop) { isFlash = false; updateUI(); }
+            if (!isTop) { isFlash = false; }
             updateUI();
+            updateSubmitButtonLabel();
+            checkIntraSessionAdaptation();
         }
 
         function toggleFlash() {
@@ -710,6 +744,8 @@
                 elTries.innerText = 1;
             }
             updateUI();
+            updateSubmitButtonLabel();
+            checkIntraSessionAdaptation();
         }
 
         function updateUI() {
@@ -842,8 +878,13 @@
             }, 800);
 
             selectedTags = [];
+            tries = 1;
+            if (elTries) elTries.innerText = 1;
+            isTop = false;
+            isFlash = false;
             updateUI();
             renderTags();
+            updateSubmitButtonLabel();
 
             // Training Mode: check if this climb completes a rung
             if (trainingActive && trainingState === 'climb'
@@ -932,7 +973,12 @@
                 return;
             }
 
-            const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan);
+            const inProgress = {
+                gradeStr: fontGrades[currentGradeIndex],
+                tries: tries || 1,
+                status: (isTop || isFlash) ? 'topped' : 'in_progress'
+            };
+            const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan, inProgress);
             const banner = document.getElementById('coachAdaptiveBanner');
             if (!banner) return;
 
@@ -985,7 +1031,12 @@
 
         function dismissCoachAdaptiveBanner() {
             if (typeof Planner !== 'undefined' && Planner.evaluateIntraSessionAdaptation) {
-                const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan);
+                const inProgress = {
+                    gradeStr: fontGrades[currentGradeIndex],
+                    tries: tries || 1,
+                    status: (isTop || isFlash) ? 'topped' : 'in_progress'
+                };
+                const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan, inProgress);
                 if (adaptation) dismissedCoachAdaptationIds.add(adaptation.id);
             }
             hideCoachAdaptiveBanner();
