@@ -67,6 +67,7 @@
         let maxGradeIndex = parseInt(localStorage.getItem('boulderMaxGradeIndex')) || 14;
         let currentGradeIndex = maxGradeIndex;
         let tries = 1;
+        let burnsRecorded = 0;
         let isTop = false;
         let isFlash = false;
         let sessionScore = 0;
@@ -695,7 +696,16 @@
 
         function quickRecordBurn() {
             if ('vibrate' in navigator) navigator.vibrate(25);
-            tries = Math.max(1, tries + 1);
+            
+            if (burnsRecorded === 0 && tries === 1) {
+                // First burn recorded on this route: record 1st attempt
+                burnsRecorded = 1;
+                tries = 1;
+            } else {
+                burnsRecorded = Math.max(burnsRecorded + 1, tries + 1);
+                tries = burnsRecorded;
+            }
+
             if (elTries) elTries.innerText = tries;
             if (isTop && tries > 1) {
                 isFlash = false;
@@ -730,6 +740,7 @@
         function adjTries(dir) {
             if ('vibrate' in navigator) navigator.vibrate(15);
             tries = Math.max(1, tries + dir);
+            burnsRecorded = tries;
             if (elTries) elTries.innerText = tries;
             if (isTop) {
                 if (tries === 1 && !flashManuallyDisabled) {
@@ -758,6 +769,7 @@
                 isFlash = false;
                 flashManuallyDisabled = false;
             }
+            if (elTries) elTries.innerText = tries;
             updateUI();
             updateSubmitButtonLabel();
             checkIntraSessionAdaptation();
@@ -940,6 +952,7 @@
 
             selectedTags = [];
             tries = 1;
+            burnsRecorded = 0;
             if (elTries) elTries.innerText = 1;
             isTop = false;
             isFlash = false;
