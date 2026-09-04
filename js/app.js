@@ -418,9 +418,9 @@
                 if (!container) return;
                 container.innerHTML = tagList.map(tag => `
                     <button onclick="toggleTag('${tag}')" id="tag-${tag}"
-                        class="py-2.5 sm:py-3 px-1 rounded-2xl border text-xs font-black uppercase tracking-wider text-center transition-all truncate shadow-sm
+                        class="py-2 px-1 rounded-xl border text-[10px] sm:text-[11px] font-black uppercase tracking-tight text-center transition-all shadow-sm flex items-center justify-center
                         ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-emerald-500/10' : 'bg-neutral-900 border-neutral-800/80 text-neutral-400 hover:text-neutral-300'}">
-                        ${tag}
+                        <span>${tag}</span>
                     </button>
                 `).join('');
             } catch (e) { console.error("renderTags failed:", e); }
