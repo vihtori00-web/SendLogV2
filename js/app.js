@@ -418,8 +418,8 @@
                 if (!container) return;
                 container.innerHTML = tagList.map(tag => `
                     <button onclick="toggleTag('${tag}')" id="tag-${tag}"
-                        class="py-2 px-1 rounded-xl border text-[10px] sm:text-[11px] font-black uppercase tracking-tight text-center transition-all shadow-sm flex items-center justify-center
-                        ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-emerald-500/10' : 'bg-neutral-900 border-neutral-800/80 text-neutral-400 hover:text-neutral-300'}">
+                        class="py-2 px-3 rounded-xl border text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap active:scale-95 shadow-sm
+                        ${selectedTags.includes(tag) ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.15)]' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200'}">
                         <span>${tag}</span>
                     </button>
                 `).join('');
@@ -717,13 +717,13 @@
             if (!btn) return;
             if (isFlash) {
                 btn.innerHTML = `<span class="text-xl">⚡</span><span>LOG FLASH (+PTS)</span>`;
-                btn.className = 'w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-2xl shadow-amber-500/25 active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5';
+                btn.className = 'w-full h-16 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-2xl shadow-amber-500/25 active:scale-[0.98] transition-all outline-none flex items-center justify-center gap-2.5';
             } else if (isTop) {
                 btn.innerHTML = `<span class="text-xl">🧗</span><span>LOG SEND (${tries} ${tries > 1 ? 'TRIES' : 'TRY'})</span>`;
-                btn.className = 'w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-2xl shadow-emerald-500/25 active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5';
+                btn.className = 'w-full h-16 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-2xl shadow-emerald-500/25 active:scale-[0.98] transition-all outline-none flex items-center justify-center gap-2.5';
             } else {
-                btn.innerHTML = `<span class="text-lg">🛑</span><span>LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})</span>`;
-                btn.className = 'w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-neutral-900 border border-neutral-700 text-neutral-200 font-black uppercase tracking-[0.2em] text-sm sm:text-base active:scale-95 transition-all outline-none flex items-center justify-center gap-2.5';
+                btn.innerHTML = `<span class="text-lg">🧗</span><span>LOG PROJECT (${tries} ${tries > 1 ? 'BURNS' : 'BURN'})</span>`;
+                btn.className = 'w-full h-16 rounded-2xl bg-neutral-900 border border-neutral-700 text-emerald-400 hover:text-emerald-300 hover:border-emerald-500/50 font-black uppercase tracking-[0.2em] text-sm sm:text-base active:scale-[0.98] transition-all outline-none flex items-center justify-center gap-2.5';
             }
         }
 
@@ -797,15 +797,15 @@
             const btn = document.getElementById('btnTop');
             if (btn) {
                 if (!isTop) {
-                    btn.className = "rounded-[1.75rem] bg-neutral-900 border border-neutral-800 text-neutral-400 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md haptic-feedback h-full";
+                    btn.className = "rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md haptic-feedback h-full";
                     btn.innerHTML = `<span class="text-lg">🧗</span><span>Topped?</span>`;
                 } else if (isFlash) {
-                    btn.className = "rounded-[1.75rem] bg-gradient-to-r from-amber-500/25 to-yellow-500/20 border border-amber-500/60 text-amber-300 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_0_20px_rgba(245,158,11,0.2)] haptic-feedback h-full";
-                    btn.innerHTML = `<span class="text-lg">⚡</span><span>Flash!</span><span onclick="toggleFlashOverride(event)" title="Switch to regular send" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-500/30 text-[10px] text-amber-200 hover:bg-amber-500/50 border border-amber-400/40">Undo</span>`;
+                    btn.className = "rounded-2xl bg-amber-500/20 border border-amber-500/50 text-amber-400 font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_0_20px_rgba(245,158,11,0.2)] haptic-feedback h-full";
+                    btn.innerHTML = `<span class="text-lg">⚡</span><span>Flash!</span><span onclick="toggleFlashOverride(event)" title="Switch to regular send" class="ml-1 px-1.5 py-0.5 rounded bg-amber-500/30 text-[10px] text-amber-200 hover:bg-amber-500/50 border border-amber-400/40">Undo</span>`;
                 } else {
-                    btn.className = "rounded-[1.75rem] bg-gradient-to-r from-emerald-500/25 to-teal-500/20 border border-emerald-500/60 text-emerald-300 font-black uppercase tracking-wider text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.2)] haptic-feedback h-full";
+                    btn.className = "rounded-2xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.2)] haptic-feedback h-full";
                     if (tries === 1) {
-                        btn.innerHTML = `<span class="text-lg">🧗</span><span>Sent (1 try)</span><span onclick="toggleFlashOverride(event)" title="Mark as flash" class="ml-1 px-2 py-0.5 rounded-lg bg-neutral-800 text-[10px] text-neutral-300 hover:text-amber-300 border border-neutral-700">⚡ Flash?</span>`;
+                        btn.innerHTML = `<span class="text-lg">🧗</span><span>Sent (1 try)</span><span onclick="toggleFlashOverride(event)" title="Mark as flash" class="ml-1 px-1.5 py-0.5 rounded bg-neutral-800 text-[10px] text-neutral-300 hover:text-amber-300 border border-neutral-700">⚡ Flash?</span>`;
                     } else {
                         btn.innerHTML = `<span class="text-lg">🧗</span><span>Sent (${tries} tries)</span>`;
                     }
@@ -816,8 +816,8 @@
             const btnF = document.getElementById('btnFlash');
             if (btnF) {
                 btnF.className = isFlash
-                    ? "flex-1 rounded-[1.8rem] border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
-                    : "flex-1 rounded-[1.8rem] border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback bg-neutral-900 border-neutral-800 text-neutral-500";
+                    ? "flex-1 rounded-2xl border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+                    : "flex-1 rounded-2xl border text-sm font-black uppercase tracking-[0.15em] flex items-center justify-center transition-all haptic-feedback bg-neutral-900 border-neutral-800 text-neutral-500";
             }
         }
 
