@@ -609,7 +609,7 @@ const Planner = (function () {
     // ------------------------------------------------------------------------
     // 7. INTRA-SESSION PERFORMANCE ADAPTATION (Dynamic Coach)
     // ------------------------------------------------------------------------
-    function evaluateIntraSessionAdaptation(activeClimbs, currentPhaseIndex, coachPlan) {
+    function evaluateIntraSessionAdaptation(activeClimbs, currentPhaseIndex, coachPlan, inProgressClimb) {
         if (!coachPlan || !coachPlan.phases || !coachPlan.phases[currentPhaseIndex]) {
             return null;
         }
@@ -618,6 +618,76 @@ const Planner = (function () {
         const phaseTitle = (phase.title || phase.name || '').toLowerCase();
         const targetGradeIdx = phase.targetGradeIdx;
         const targetGradeStr = phase.targetGradeStr;
+
+        // 0. LIVE IN-PROGRESS WORKING BOULDER CHECKS (Before climb is logged)
+        if (inProgressClimb && inProgressClimb.tries) {
+            const currentTries = inProgressClimb.tries;
+            const currentGradeIdx = GRADES.indexOf(inProgressClimb.gradeStr);
+            const isNearTarget = targetGradeIdx !== null && currentGradeIdx >= (targetGradeIdx - 1);
+
+            // Live Limit Projecting Checks
+            const isProjectPhase = phaseTitle.includes('project') || phaseTitle.includes('limit') || phaseTitle.includes('main');
+            if (isProjectPhase && isNearTarget) {
+                if (currentTries >= 5) {
+                    return {
+                        id: `live_burn_cap_${currentTries}`,
+                        type: 'burn_cap',
+                        title: '🛑 Limit Burn Cap Reached',
+                        message: `${currentTries} burns on this boulder. Fast-twitch motor recruitment degrades after 5 max burns. Advance to cool down to protect pulleys.`,
+                        badgeColor: 'amber',
+                        actions: [
+                            {
+                                label: 'Advance to Cool Down ⏭️',
+                                action: 'advance_phase',
+                                primary: true
+                            }
+                        ]
+                    };
+                }
+                if (currentTries >= 3 && inProgressClimb.status !== 'topped') {
+                    return {
+                        id: `live_rule_of_3_${currentTries}`,
+                        type: 'rule_of_3',
+                        title: '⚠️ Rule of 3 (In Progress)',
+                        message: `${currentTries} burns on this project problem. Rate of force development is dropping. Consider resting 4m or wrapping up limit burns.`,
+                        badgeColor: 'amber',
+                        actions: [
+                            {
+                                label: 'Advance to Cool Down ⏭️',
+                                action: 'advance_phase',
+                                primary: true
+                            },
+                            {
+                                label: '⏱️ +2m Rest',
+                                action: 'add_rest',
+                                restSeconds: 120,
+                                primary: false
+                            }
+                        ]
+                    };
+                }
+            }
+
+            // Live Warmup Struggle
+            const isWarmupPhase = phaseTitle.includes('warmup') || phaseTitle.includes('movement');
+            if (isWarmupPhase && currentTries >= 2 && inProgressClimb.status !== 'topped') {
+                return {
+                    id: `live_warmup_struggle_${currentTries}`,
+                    type: 'warmup_struggle',
+                    title: '⚠️ Warmup Taking Extra Burns',
+                    message: `Warmup boulder has taken ${currentTries} burns. Connective tissues need extra time to warm up. Take 2m rest before ramping up intensity.`,
+                    badgeColor: 'amber',
+                    actions: [
+                        {
+                            label: '⏱️ +2m Warmup Rest',
+                            action: 'add_rest',
+                            restSeconds: 120,
+                            primary: true
+                        }
+                    ]
+                };
+            }
+        }
 
         // Filter climbs logged in this session that belong to this phase or recent climbs
         const phaseClimbs = (activeClimbs || []).filter(c => {
