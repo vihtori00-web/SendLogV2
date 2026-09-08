@@ -246,37 +246,39 @@
 
             const stats = getHistoryStats(filteredHistory);
 
-            document.getElementById('statTotalPoints').innerText = stats.totalPoints;
-            document.getElementById('statTotalSends').innerText = stats.totalSends;
-            document.getElementById('historyPeriodSummary').innerText = `${filteredHistory.length} sessions completed`;
-            document.getElementById('statProjectTries').innerText = stats.totalProjTries;
-            document.getElementById('statFlashRate').innerText = stats.flashRate + '%';
-            document.getElementById('statAvgTime').innerText = stats.avgDur || '-';
+            const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+            const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
+
+            setTxt('statTotalPoints', stats.totalPoints);
+            setTxt('statTotalSends', stats.totalSends);
+            setTxt('historyPeriodSummary', `${filteredHistory.length} sessions completed`);
+            setTxt('statProjectTries', stats.totalProjTries);
+            setTxt('statFlashRate', stats.flashRate + '%');
+            setTxt('statAvgTime', stats.avgDur || '-');
             
             const gIdx = Math.floor(stats.avgGradeScore);
             const gRem = (stats.avgGradeScore - gIdx).toFixed(1);
             const preciseG = stats.totalSuccessfulClimbs > 0 ? `${fontGrades[gIdx]}<span class="text-[10px] text-neutral-500 ml-1">+${gRem}</span>` : '-';
-            document.getElementById('statAvgGrade').innerHTML = preciseG;
+            setHtml('statAvgGrade', preciseG);
 
             // Personal Records (filtered by current view mode)
             const pr = getPersonalRecords(filteredHistory);
-            document.getElementById('prBestScore').innerText = pr.bestScore || '-';
-            document.getElementById('prHighestGrade').innerText = pr.highestGrade;
-            document.getElementById('prMostSends').innerText = pr.mostSends;
-            document.getElementById('prLongestSession').innerText = pr.longestSession;
-            const hlEl = document.getElementById('prHighestLadder');
-            if (hlEl) hlEl.innerText = pr.highestLadder;
+            setTxt('prBestScore', pr.bestScore || '-');
+            setTxt('prHighestGrade', pr.highestGrade);
+            setTxt('prMostSends', pr.mostSends);
+            setTxt('prLongestSession', pr.longestSession);
+            setTxt('prHighestLadder', pr.highestLadder);
 
             // Streak (always computed from all history)
             const streak = getStreakData();
-            document.getElementById('statCurrentStreak').innerText = streak.current;
-            document.getElementById('statLongestStreak').innerText = streak.longest;
+            setTxt('statCurrentStreak', streak.current);
+            setTxt('statLongestStreak', streak.longest);
 
             // Calendar Heatmap
-            renderCalendarHeatmap();
+            if (typeof renderCalendarHeatmap === 'function') renderCalendarHeatmap();
 
             // Period comparison deltas
-            updateComparisonDeltas();
+            if (typeof updateComparisonDeltas === 'function') updateComparisonDeltas();
 
             // Chart data rendering
             if (chart && chart.config.type !== currentChartType) {
@@ -486,25 +488,139 @@
             updateCardHighlights();
         }
 
+        // -- HISTORY SEGMENTED NAVIGATION & FILTERING --
+        let historySubTab = localStorage.getItem('sendlog_history_subtab') || 'sessions';
+        let historyTypeFilter = 'all'; // 'all' | 'climbs' | 'workouts'
+
+        function switchHistorySubTab(tab) {
+            historySubTab = tab;
+            try {
+                localStorage.setItem('sendlog_history_subtab', tab);
+            } catch (e) { }
+
+            const sessBtn = document.getElementById('historySubTabSessions');
+            const analBtn = document.getElementById('historySubTabAnalytics');
+            const sessView = document.getElementById('historyViewSessions');
+            const analView = document.getElementById('historyViewAnalytics');
+
+            if ('vibrate' in navigator) navigator.vibrate(10);
+
+            if (tab === 'sessions') {
+                if (sessView) sessView.classList.remove('hidden');
+                if (analView) analView.classList.add('hidden');
+                if (sessBtn) {
+                    sessBtn.className = "flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 bg-emerald-500 text-black shadow-md";
+                }
+                if (analBtn) {
+                    analBtn.className = "flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 text-neutral-400 hover:text-white";
+                }
+                renderHistoryList();
+            } else {
+                if (sessView) sessView.classList.add('hidden');
+                if (analView) analView.classList.remove('hidden');
+                if (analBtn) {
+                    analBtn.className = "flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 bg-emerald-500 text-black shadow-md";
+                }
+                if (sessBtn) {
+                    sessBtn.className = "flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 text-neutral-400 hover:text-white";
+                }
+                updateAnalytics();
+                if (typeof renderCalendarHeatmap === 'function') renderCalendarHeatmap();
+                if (chart) {
+                    requestAnimationFrame(() => {
+                        chart.resize();
+                    });
+                }
+            }
+        }
+
+        function filterHistoryType(type) {
+            historyTypeFilter = (type || 'all').toLowerCase();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+
+            ['all', 'climbs', 'workouts'].forEach(t => {
+                const btn1 = document.getElementById(`hfType${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                const btn2 = document.getElementById(`filterBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                [btn1, btn2].forEach(btn => {
+                    if (btn) {
+                        if (t === historyTypeFilter) {
+                            btn.className = "px-3 py-1 rounded-lg text-xs font-black uppercase transition-all bg-emerald-500 text-black shadow-sm";
+                        } else {
+                            btn.className = "px-3 py-1 rounded-lg text-xs font-black uppercase transition-all text-neutral-400 hover:text-white";
+                        }
+                    }
+                });
+            });
+
+            renderHistoryList();
+        }
+
+        window.switchHistorySubTab = switchHistorySubTab;
+        window.filterHistoryType = filterHistoryType;
 
         function renderHistoryList() {
             const listEl = document.getElementById('historyList');
-            const now = new Date();
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-            const startOfWeek = getStartOfWeek();
+            if (!listEl) return;
+            let filteredHistory = [...boulderHistory];
 
-            const filteredHistory = historyViewMode === 'ALL'
-                ? boulderHistory
-                : historyViewMode === 'WEEK'
-                    ? boulderHistory.filter(s => (s.timestamp || 0) >= startOfWeek)
-                    : boulderHistory.filter(s => (s.timestamp || 0) >= startOfMonth);
+            // Filter by Period
+            const now = new Date();
+            const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).setHours(0, 0, 0, 0);
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+            if (historyViewMode === 'WEEK') {
+                filteredHistory = filteredHistory.filter(s => (s.timestamp || 0) >= startOfWeek);
+            } else if (historyViewMode === 'MONTH') {
+                filteredHistory = filteredHistory.filter(s => (s.timestamp || 0) >= startOfMonth);
+            }
+
+            // Compute period summary numbers
+            let periodSends = 0;
+            let periodDuration = 0;
+            let bestGradeIdx = -1;
+            let periodWorkouts = 0;
+
+            filteredHistory.forEach(s => {
+                periodDuration += (s.duration || 0);
+                (s.climbs || []).forEach(c => {
+                    if (c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash) {
+                        periodSends++;
+                        const gIdx = fontGrades.indexOf(c.gradeStr);
+                        if (gIdx > bestGradeIdx) bestGradeIdx = gIdx;
+                    }
+                });
+                periodWorkouts += (s.workouts || []).length;
+            });
+
+            const bestGradeStr = bestGradeIdx >= 0 ? fontGrades[bestGradeIdx] : '-';
+            const heroSummary = document.getElementById('historyPeriodSummary');
+            const heroTitle = document.getElementById('historyHeroTitle');
+            const heroSubtitle = document.getElementById('historyHeroSubtitle');
+
+            if (heroSummary) heroSummary.innerText = `${filteredHistory.length} session${filteredHistory.length !== 1 ? 's' : ''} completed`;
+            if (heroTitle) {
+                const parts = [`${filteredHistory.length} Sessions`, `${periodSends} Sends`];
+                if (periodWorkouts > 0) parts.push(`${periodWorkouts} Workouts`);
+                heroTitle.innerText = parts.join(' · ');
+            }
+            if (heroSubtitle) {
+                const durStr = formatDuration(periodDuration) || '0m';
+                heroSubtitle.innerText = `Max Send: ${bestGradeStr} · Total Active: ${durStr}`;
+            }
+
+            // Apply type filter
+            if (historyTypeFilter === 'climbs') {
+                filteredHistory = filteredHistory.filter(s => (s.climbs || []).length > 0);
+            } else if (historyTypeFilter === 'workouts') {
+                filteredHistory = filteredHistory.filter(s => (s.workouts || []).length > 0);
+            }
 
             if (filteredHistory.length === 0) {
                 listEl.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-20 opacity-30">
-                    <div class="text-6xl mb-4">🏆</div>
-                    <p class="text-sm font-black uppercase tracking-widest">No history yet</p>
-                    <p class="text-[10px] mt-1">Your climbing journey starts here</p>
+                <div class="flex flex-col items-center justify-center py-16 opacity-40">
+                    <div class="text-5xl mb-3">🏆</div>
+                    <p class="text-sm font-black uppercase tracking-widest text-white">No sessions found</p>
+                    <p class="text-[10px] text-neutral-400 mt-1">Start logging climbs or workouts to see them here</p>
                 </div>`;
                 return;
             }
@@ -523,71 +639,93 @@
                 
                 let relLabel = "";
                 if (isToday) relLabel = "TODAY";
-                else if (isYesterday) relLabel = "YESTERDAY";
+                else if (isYesterday) relLabel = "YEST";
                 else relLabel = sDate.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
 
                 const dayNum = sDate.getDate();
-                const fullDateTitle = isToday ? "Today's Session" : isYesterday ? "Yesterday's Session" : `Session on ${sDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
                 const climbCount = s.climbs ? s.climbs.length : 0;
+                const workoutList = s.workouts || [];
+                const workoutCount = workoutList.length;
+                const isWorkoutOnly = climbCount === 0 && workoutCount > 0;
+                const isHybrid = climbCount > 0 && workoutCount > 0;
 
-                // Training Mode: Check if there's any climb with isLadderAscent: true
-                const ladderClimbs = (s.climbs || []).filter(c => c.isLadderAscent);
-                let peakLadderBadge = "";
-                if (ladderClimbs.length > 0) {
-                    const peakGradeStr = ladderClimbs
-                        .map(c => c.gradeStr)
-                        .reduce((best, cur) => fontGrades.indexOf(cur) > fontGrades.indexOf(best) ? cur : best, ladderClimbs[0].gradeStr);
-                    peakLadderBadge = `<span class="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">🪜 Ladder Peak: ${peakGradeStr}</span>`;
+                const primaryGrade = sends > 0 ? avgGrade : (climbCount > 0 ? (s.climbs[0].gradeStr || '-') : (workoutCount > 0 ? (workoutList[0].shortName || workoutList[0].name) : '-'));
+
+                let peakLadder = 0;
+                if (s.climbs) {
+                    s.climbs.forEach(c => {
+                        const m = (c.tags || []).find(t => t.startsWith('ladder-'));
+                        if (m) {
+                            const r = parseInt(m.split('-')[1]);
+                            if (r > peakLadder) peakLadder = r;
+                        }
+                    });
                 }
-                
-                // Mini Grade Bar Logic
-                const gradeCounts = {};
-                (s.climbs || []).forEach(c => {
-                    if (c.gradeStr && c.gradeStr !== '🍺') {
-                        gradeCounts[c.gradeStr] = (gradeCounts[c.gradeStr] || 0) + 1;
-                    }
-                });
-                const gradeKeys = Object.keys(gradeCounts).sort((a, b) => fontGrades.indexOf(a) - fontGrades.indexOf(b));
-                const barColors = ['#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
-                const miniBarHtml = gradeKeys.map((g, i) => {
-                    const pct = (gradeCounts[g] / Math.max(1, climbCount)) * 100;
-                    return `<div style="width:${pct}%;background:${barColors[i % barColors.length]}" class="h-full opacity-60"></div>`;
-                }).join('');
+                const peakLadderBadge = peakLadder > 0 
+                    ? `<span class="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">🪜 Rung ${peakLadder}</span>` 
+                    : '';
+
+                const workoutBadges = workoutList.map(w => `
+                    <span class="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">${w.icon || '💪'} ${w.badge || w.category || 'Workout'}</span>
+                `).join(' ');
+
+                const gradeColors = ['#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444'];
+                let miniBarHtml = '';
+                if (climbCount > 0) {
+                    const gradeSegments = {};
+                    s.climbs.forEach(c => {
+                        if (c.gradeStr && c.gradeStr !== '🍺') {
+                            gradeSegments[c.gradeStr] = (gradeSegments[c.gradeStr] || 0) + 1;
+                        }
+                    });
+                    const sortedGrades = Object.keys(gradeSegments).sort((a,b) => fontGrades.indexOf(a) - fontGrades.indexOf(b));
+                    miniBarHtml = sortedGrades.map((g, i) => {
+                        const pct = Math.round((gradeSegments[g] / climbCount) * 100);
+                        const col = gradeColors[i % gradeColors.length];
+                        return `<div style="width: ${pct}%; background-color: ${col};" class="h-full" title="${g}: ${gradeSegments[g]}"></div>`;
+                    }).join('');
+                }
 
                 return `
-                <li class="group relative px-5 py-3 active:bg-neutral-800/80 transition-all cursor-pointer border-b border-neutral-800/40 touch-pan-y" style="touch-action: pan-y;" onclick="openSessionDetail(${actualIndex})">
-                    <div class="flex items-center justify-between mb-1.5">
-                        <div class="flex items-center gap-3 min-w-0">
-                            <!-- Date Badge -->
-                            <div class="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-neutral-950 border border-neutral-800 shrink-0">
-                                <span class="text-[9px] font-black text-emerald-400 uppercase leading-none mb-0.5">${relLabel}</span>
-                                <span class="text-xl font-black text-white leading-none">${dayNum}</span>
+                <li onclick="openSessionDetail(${actualIndex})" 
+                    class="bg-neutral-900 border ${isWorkoutOnly ? 'border-cyan-500/25' : isHybrid ? 'border-emerald-500/25' : 'border-neutral-800'} rounded-[2rem] p-4 flex flex-col justify-between active:scale-[0.98] transition cursor-pointer shadow-sm hover:border-neutral-700">
+                    <div class="flex items-center justify-between">
+                        <!-- Date & Key Info -->
+                        <div class="flex items-center gap-3">
+                            <div class="flex flex-col items-center justify-center w-11 h-11 bg-neutral-950 rounded-2xl border border-neutral-800 shrink-0">
+                                <span class="text-[9px] font-black ${isToday ? 'text-emerald-400' : isYesterday ? 'text-amber-400' : 'text-neutral-500'} tracking-wider">${relLabel}</span>
+                                <span class="text-sm font-black text-white leading-none mt-0.5">${dayNum}</span>
                             </div>
-                            <!-- Title & Stats -->
-                            <div class="min-w-0">
-                                <h4 class="text-base font-black text-white uppercase tracking-tight">${fullDateTitle}</h4>
-                                <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                    <span class="text-[10px] font-bold text-neutral-500">${climbCount} Climbs</span>
-                                    <span class="text-neutral-800 text-[8px]">●</span>
-                                    <span class="text-[10px] font-bold text-emerald-400">${sends} Sends</span>
-                                    <span class="text-neutral-800 text-[8px]">●</span>
-                                    <span class="text-[10px] font-bold text-blue-400">Avg: ${avgGrade}</span>
-                                    ${flashes > 0 ? ` <span class="text-neutral-800 text-[8px]">●</span> <span class="text-[10px] font-bold text-amber-500">⚡ ${flashes} Flash</span>` : ''}
-                                    ${peakLadderBadge ? ` <span class="text-neutral-800 text-[8px]">●</span> ${peakLadderBadge}` : ''}
+                            <div>
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <h4 class="text-sm font-black text-white truncate">${primaryGrade}</h4>
+                                    ${isWorkoutOnly ? '<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 uppercase">Workout</span>' : ''}
+                                    ${isHybrid ? '<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">Hybrid</span>' : ''}
+                                </div>
+                                <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    ${climbCount > 0 ? `
+                                        <span class="text-[10px] font-bold text-neutral-400">${climbCount} Climb${climbCount > 1 ? 's' : ''}</span>
+                                        ${sends > 0 ? `<span class="text-neutral-700 text-[8px]">●</span><span class="text-[10px] font-bold text-emerald-400">✓ ${sends}</span>` : ''}
+                                        ${flashes > 0 ? `<span class="text-neutral-700 text-[8px]">●</span><span class="text-[10px] font-bold text-amber-400">⚡ ${flashes}</span>` : ''}
+                                    ` : `
+                                        <span class="text-[10px] font-bold text-cyan-400">💪 ${workoutCount} Workout${workoutCount > 1 ? 's' : ''} Completed</span>
+                                    `}
+                                    ${peakLadderBadge ? ` <span class="text-neutral-700 text-[8px]">●</span> ${peakLadderBadge}` : ''}
+                                    ${workoutBadges}
                                 </div>
                             </div>
                         </div>
                         <!-- Score & Duration -->
                         <div class="text-right shrink-0 ml-2">
-                            <div class="text-lg font-black text-white leading-none">${s.score.toLocaleString()}<span class="text-[8px] text-neutral-500 ml-1 uppercase">pts</span></div>
-                            <div class="text-[10px] font-bold text-neutral-500 italic mt-0.5">${formatDuration(s.duration) || '--'}</div>
+                            <div class="text-base font-black text-white leading-none">${(s.score || 0).toLocaleString()}<span class="text-[8px] text-neutral-500 ml-1 uppercase">pts</span></div>
+                            <div class="text-[10px] font-bold text-neutral-400 italic mt-1">${formatDuration(s.duration) || '--'}</div>
                         </div>
                     </div>
                     
-                    <div class="flex items-center gap-4 mt-3">
-                        <div class="flex-1 h-1.5 bg-neutral-900 rounded-full overflow-hidden flex shadow-inner border border-neutral-800/30">
-                            ${miniBarHtml || '<div class="w-full h-full bg-neutral-950 opacity-20"></div>'}
+                    <div class="flex items-center gap-3 mt-4">
+                        <div class="flex-1 h-1.5 bg-neutral-950 rounded-full overflow-hidden flex shadow-inner border border-neutral-800/40">
+                            ${miniBarHtml || (workoutCount > 0 ? '<div class="w-full h-full bg-cyan-500/40"></div>' : '<div class="w-full h-full bg-neutral-950 opacity-20"></div>')}
                         </div>
                         <button onclick="event.stopPropagation(); deleteSession(${actualIndex})" class="p-1 text-neutral-500/40 hover:text-red-500 active:scale-90 transition-all">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -598,30 +736,73 @@
             }).join('');
         }
 
-
         // -- SESSION DETAIL MODAL --
         let currentSessionDetailIndex = null;
         function openSessionDetail(historyIndex, push = true) {
-            currentSessionDetailIndex = historyIndex;
-            const s = boulderHistory[historyIndex];
+            let s;
+            if (typeof historyIndex === 'object' && historyIndex !== null) {
+                s = historyIndex;
+                historyIndex = boulderHistory.indexOf(s);
+            } else {
+                s = boulderHistory[historyIndex];
+            }
             if (!s) return;
+            currentSessionDetailIndex = historyIndex;
             if ('vibrate' in navigator) navigator.vibrate(10);
             
-            if (push) history.pushState({ overlay: 'sessionDetail', index: historyIndex }, '', '#session-' + historyIndex);
+            if (push && historyIndex >= 0) history.pushState({ overlay: 'sessionDetail', index: historyIndex }, '', '#session-' + historyIndex);
+
+            const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
 
             // Populate header
-            document.getElementById('sdDate').innerText = s.date;
+            setTxt('sdDate', s.date || '');
             const durationTxt = s.duration ? ` (${formatDuration(s.duration)})` : '';
-            document.getElementById('sdScore').innerText = s.score.toLocaleString() + ' pts' + durationTxt;
+            setTxt('sdScore', (s.score || 0).toLocaleString() + ' pts' + durationTxt);
 
             const climbs = s.climbs || [];
             const stats = getSessionStats(s);
             const projects = climbs.length - stats.sends;
 
-            document.getElementById('sdClimbCount').innerText = climbs.length;
-            document.getElementById('sdSends').innerText = stats.sends;
-            document.getElementById('sdFlashes').innerText = stats.flashes;
-            document.getElementById('sdProjects').innerText = projects;
+            setTxt('sdClimbCount', climbs.length);
+            setTxt('sdSends', stats.sends);
+            setTxt('sdFlashes', stats.flashes);
+            setTxt('sdProjects', projects);
+
+            // Off-wall Workouts Section
+            const workouts = s.workouts || [];
+            const workoutsCont = document.getElementById('sdWorkoutsContainer');
+            const workoutList = document.getElementById('sdWorkoutList');
+            if (workoutsCont && workoutList) {
+                if (workouts.length > 0) {
+                    workoutsCont.classList.remove('hidden');
+                    workoutList.innerHTML = workouts.map(w => `
+                        <li class="p-3 bg-cyan-500/10 border border-cyan-500/25 rounded-2xl space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg">${w.icon || '💪'}</span>
+                                    <div>
+                                        <h5 class="text-xs font-black text-white">${w.name}</h5>
+                                        <p class="text-[9px] text-neutral-400">${w.durationMinutes ? `${w.durationMinutes}m · ` : ''}${w.exercises ? `${w.exercises.length} Exercises` : ''}</p>
+                                    </div>
+                                </div>
+                                <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">${w.badge || w.category || 'Workout'}</span>
+                            </div>
+                            ${w.exercises && w.exercises.length > 0 ? `
+                                <div class="space-y-1 pt-1 border-t border-cyan-500/15">
+                                    ${w.exercises.map(ex => `
+                                        <div class="flex items-center justify-between text-[10px] bg-neutral-900/70 px-2.5 py-1.5 rounded-lg border border-neutral-800">
+                                            <span class="text-neutral-200 font-bold">${ex.name}</span>
+                                            <span class="text-emerald-400 font-black flex items-center gap-1">✓ ${ex.completedSets !== undefined ? ex.completedSets : (ex.setsCompleted !== undefined ? ex.setsCompleted : (ex.sets || 3))} Sets</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </li>
+                    `).join('');
+                } else {
+                    workoutsCont.classList.add('hidden');
+                }
+            }
 
             // Grade distribution bar
             const gradeBar = document.getElementById('sdGradeBar');
@@ -636,27 +817,32 @@
             const total = gradeKeys.reduce((s, k) => s + gradeCounts[k], 0);
             const barColors = ['#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
 
+            const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
+
             if (gradeKeys.length > 0) {
-                gradeBar.innerHTML = gradeKeys.map((g, i) => {
+                const barHtml = gradeKeys.map((g, i) => {
                     const pct = (gradeCounts[g] / Math.max(1, total)) * 100;
                     const col = barColors[i % barColors.length];
                     return `<div style="width:${pct}%;background:${col};opacity:0.85" title="${g}: ${gradeCounts[g]}"></div>`;
                 }).join('');
-                gradeLabels.innerHTML = gradeKeys.map((g, i) => {
+                setHtml('sdGradeBar', barHtml);
+
+                const labelsHtml = gradeKeys.map((g, i) => {
                     const pct = (gradeCounts[g] / Math.max(1, total)) * 100;
                     const col = barColors[i % barColors.length];
                     return `<div style="width:${pct}%;overflow:hidden;color:${col}" class="text-[8px] font-black truncate">
                         <span style="color:${col}">${g}×${gradeCounts[g]}</span>
                     </div>`;
                 }).join('');
+                setHtml('sdGradeLabels', labelsHtml);
             } else {
-                gradeBar.innerHTML = '<div class="w-full h-full bg-neutral-800 rounded-lg"></div>';
-                gradeLabels.innerHTML = '';
+                setHtml('sdGradeBar', '<div class="w-full h-full bg-neutral-800 rounded-lg"></div>');
+                setHtml('sdGradeLabels', '');
             }
 
             // Climb list
-            document.getElementById('sdClimbList').innerHTML = climbs.length === 0 
-                ? '<li class="text-neutral-500 text-sm text-center py-4">No climbs recorded.</li>'
+            const climbListHtml = climbs.length === 0 
+                ? '<li class="text-neutral-500 text-sm text-center py-4">No climbs recorded in this session.</li>'
                 : climbs.map(c => {
                     const statusColor = c.statusText === 'Flash' ? 'text-amber-400' : c.statusText === 'Top' ? 'text-blue-400' : 'text-neutral-400';
                     const bgColor = c.statusText === 'Flash' ? 'bg-amber-500/10 border-amber-500/20' : c.statusText === 'Top' ? 'bg-blue-500/10 border-blue-500/20' : 'bg-neutral-800/30 border-neutral-700/30';
@@ -673,24 +859,27 @@
                         <span class="text-emerald-400 font-bold text-sm">+${c.points} pts</span>
                     </li>`;
                 }).join('');
+            setHtml('sdClimbList', climbListHtml);
 
             // Show overlay with animation
             const overlay = document.getElementById('sessionDetailOverlay');
             const sheet = document.getElementById('sessionDetailSheet');
-            overlay.classList.replace('hidden', 'flex');
-            requestAnimationFrame(() => {
+            if (overlay) overlay.classList.replace('hidden', 'flex');
+            if (sheet) {
                 requestAnimationFrame(() => {
-                    sheet.style.transform = 'translateY(0)';
+                    requestAnimationFrame(() => {
+                        sheet.style.transform = 'translateY(0)';
+                    });
                 });
-            });
+            }
         }
 
         function closeSessionDetail(event, pop = true) {
             if (event && event.target !== document.getElementById('sessionDetailOverlay')) return;
             const overlay = document.getElementById('sessionDetailOverlay');
             const sheet = document.getElementById('sessionDetailSheet');
-            sheet.style.transform = 'translateY(100%)';
-            setTimeout(() => overlay.classList.replace('flex', 'hidden'), 300);
+            if (sheet) sheet.style.transform = 'translateY(100%)';
+            if (overlay) setTimeout(() => overlay.classList.replace('flex', 'hidden'), 300);
             if (pop) history.back();
         }
 
@@ -1154,6 +1343,45 @@
                 });
             } catch (e) { }
         }
+
+        function playIntervalBeep(type = 'work') {
+            if (!audioCtx) initAudio();
+            if (!audioCtx) return;
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                const t = audioCtx.currentTime;
+                if (type === 'prep') {
+                    // countdown tick (short high tap)
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, t);
+                    gain.gain.setValueAtTime(0.3, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+                    osc.start(t);
+                    osc.stop(t + 0.08);
+                } else if (type === 'work') {
+                    // work start tone (bright higher tone)
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1760, t);
+                    gain.gain.setValueAtTime(0.45, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+                    osc.start(t);
+                    osc.stop(t + 0.25);
+                } else if (type === 'rest') {
+                    // rest tone (calm lower tone)
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, t);
+                    gain.gain.setValueAtTime(0.35, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    osc.start(t);
+                    osc.stop(t + 0.15);
+                }
+            } catch (e) { }
+        }
+        window.playIntervalBeep = playIntervalBeep;
 
         // -- LOGIC: REST TIMER --
         let restTimerInterval = null;

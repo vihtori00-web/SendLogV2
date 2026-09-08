@@ -24,6 +24,97 @@ const Planner = (function () {
         slab: 0.80        // Footwork, core, very low tendon stress
     };
 
+    // Off-the-wall exercise definitions and science-backed presets
+    const EXERCISES_ANTAGONIST = [
+        { id: 'pushups', name: 'Pushups / Diamond Pushups', sets: 3, reps: '15 reps', restSeconds: 60, desc: 'Engage serratus anterior and chest antagonists to balance pulling volume.' },
+        { id: 'reverse_curls', name: 'Reverse Wrist Curls', sets: 3, reps: '15 reps', restSeconds: 60, desc: 'Extensor tendon strengthening for elbow & forearm tendon balance.' },
+        { id: 'band_pullaparts', name: 'Resistance Band Pull-Aparts', sets: 3, reps: '20 reps', restSeconds: 45, desc: 'Rear delts and rhomboids for posture and scapular retraction.' },
+        { id: 'extensor_bands', name: 'Finger Extensor Rubber Bands', sets: 3, reps: '25 reps', restSeconds: 45, desc: 'Balance flexor pulleys and prevent finger overload.' }
+    ];
+
+    const EXERCISES_MOBILITY = [
+        { id: 'hip_90_90', name: '90/90 Hip Switches', sets: 3, reps: '10 switches', restSeconds: 45, desc: 'Internal and external rotation of hip capsules for closer hip placement.' },
+        { id: 'frog_stretch', name: 'Deep Frog Stretch', sets: 3, reps: '45s hold', restSeconds: 45, desc: 'Adductor opening for wide dropknees and smear stems.' },
+        { id: 'thoracic_rotation', name: 'Thoracic Spine Rotations', sets: 3, reps: '10 reps / side', restSeconds: 45, desc: 'T-spine mobility for reach and rotational compression.' },
+        { id: 'shoulder_dislocates', name: 'Shoulder Dislocates (Band)', sets: 3, reps: '15 slow reps', restSeconds: 45, desc: 'Restore overhead shoulder mobility and open chest.' }
+    ];
+
+    const EXERCISES_CORE = [
+        { id: 'hollow_hold', name: 'Hollow Body Holds', sets: 3, reps: '30s hold', restSeconds: 60, desc: 'Lower back pinned firmly to the mat; maintain full-body tension.' },
+        { id: 'l_sit', name: 'L-Sit / Tuck L-Sit', sets: 3, reps: '20s hold', restSeconds: 60, desc: 'Depress shoulders strongly on parallettes or floor.' },
+        { id: 'side_plank', name: 'Side Planks with Hip Dip', sets: 3, reps: '30s / side', restSeconds: 45, desc: 'Oblique activation for heel hooks and steep overhangs.' },
+        { id: 'bird_dog', name: 'Bird-Dog (3s Hold)', sets: 3, reps: '10 reps / side', restSeconds: 45, desc: 'Posterior chain, glute, and rotational stabilization.' }
+    ];
+
+    const WORKOUT_PRESETS = [
+        {
+            id: 'antagonist_armor',
+            name: 'Antagonist Armor (Joint & Tendon Prehab)',
+            shortName: 'Antagonist Armor',
+            category: 'prehab',
+            icon: '🛡️',
+            badge: 'Prehab',
+            durationMinutes: 25,
+            desc: 'Strengthen extensors, shoulders, and chest to balance pulling volume and prevent climber elbow.',
+            exercises: EXERCISES_ANTAGONIST
+        },
+        {
+            id: 'repeaters_7_3',
+            name: 'Lattice 7:3 Repeaters (Finger Aerobic Power)',
+            shortName: '7:3 Repeaters',
+            category: 'hangboard',
+            icon: '⚡',
+            badge: 'Hangboard',
+            durationMinutes: 20,
+            desc: 'Classic Lattice finger endurance protocol: 6 reps of 7s on / 3s off per set on a 20mm edge.',
+            exercises: [
+                { id: 'rep_set_1', name: 'Set 1: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Half-crimp or open-hand on 20mm edge at bodyweight. Strict audio interval.' },
+                { id: 'rep_set_2', name: 'Set 2: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Maintain open chest and active scapular retraction.' },
+                { id: 'rep_set_3', name: 'Set 3: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Do not crimp with thumb wrap. Strict form.' },
+                { id: 'rep_set_4', name: 'Set 4: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Final round of aerobic recruitment.' }
+            ]
+        },
+        {
+            id: 'max_hangs',
+            name: 'Eva López Max Hangs (Max Recruitment)',
+            shortName: 'Max Hangs',
+            category: 'hangboard',
+            icon: '🧗',
+            badge: 'Hangboard',
+            durationMinutes: 25,
+            desc: '5 sets of 10s hangs at 85-90% max load on 18-20mm edge with full 3m neural recovery between hangs.',
+            exercises: [
+                { id: 'max_hang_1', name: 'Hang 1 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Strict half-crimp on 18–20mm edge. Full 3m rest.' },
+                { id: 'max_hang_2', name: 'Hang 2 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Maintain scapular engagement throughout.' },
+                { id: 'max_hang_3', name: 'Hang 3 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Maximum motor unit recruitment.' },
+                { id: 'max_hang_4', name: 'Hang 4 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Discontinue immediately if form slips.' },
+                { id: 'max_hang_5', name: 'Hang 5 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Final neural recruitment repetition.' }
+            ]
+        },
+        {
+            id: 'climber_core',
+            name: 'Climber Core & Body Tension Circuit',
+            shortName: 'Climber Core',
+            category: 'core',
+            icon: '💪',
+            badge: 'Core',
+            durationMinutes: 20,
+            desc: 'Build toe-to-finger anterior chain tension for steep overhangs and board problems.',
+            exercises: EXERCISES_CORE
+        },
+        {
+            id: 'mobility_flow',
+            name: 'Hip & Thoracic Mobility Flow',
+            shortName: 'Hip Mobility',
+            category: 'mobility',
+            icon: '🧘',
+            badge: 'Mobility',
+            durationMinutes: 20,
+            desc: 'Unlock high steps, frog positions, and closer-to-wall body mechanics.',
+            exercises: EXERCISES_MOBILITY
+        }
+    ];
+
     // User calibration settings stored in localStorage
     function getCalibration() {
         try {
@@ -403,22 +494,26 @@ const Planner = (function () {
                     {
                         name: 'Antagonist Care (20m)',
                         title: 'Antagonist Care',
+                        type: 'workout',
                         desc: 'Reverse wrist curls, pushups, finger extensor bands (3x15).',
                         durationMinutes: 20,
                         restSeconds: 60,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_ANTAGONIST
                     },
                     {
                         name: 'Mobility & Hips (25m)',
                         title: 'Mobility & Hips',
+                        type: 'workout',
                         desc: 'Hip openers, thoracic spine rotations, shoulder dislocates.',
                         durationMinutes: 25,
-                        restSeconds: 60,
+                        restSeconds: 45,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_MOBILITY
                     }
                 ];
             } else if (allocatedTime >= 120) {
@@ -427,32 +522,38 @@ const Planner = (function () {
                     {
                         name: 'Antagonist & Push (30m)',
                         title: 'Antagonist & Push',
+                        type: 'workout',
                         desc: 'Reverse wrist curls, pushups, ring dips, extensor bands (4x15).',
                         durationMinutes: 30,
                         restSeconds: 60,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_ANTAGONIST
                     },
                     {
                         name: 'Deep Myofascial & Mobility (45m)',
                         title: 'Deep Myofascial & Mobility',
+                        type: 'workout',
                         desc: 'Foam rolling, hip capsule openers, thoracic rotation, shoulder mobility.',
                         durationMinutes: 45,
-                        restSeconds: 60,
+                        restSeconds: 45,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_MOBILITY
                     },
                     {
                         name: 'Core & Scapular Stability (45m)',
                         title: 'Core & Scapular Stability',
-                        desc: 'Planks, hollow holds, serratus slides, Y-T-W raises.',
+                        type: 'workout',
+                        desc: 'Planks, hollow holds, serratus slides, bird-dogs.',
                         durationMinutes: 45,
-                        restSeconds: 60,
+                        restSeconds: 45,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_CORE
                     }
                 ];
             } else {
@@ -461,6 +562,7 @@ const Planner = (function () {
                     {
                         name: 'Zero Climbing',
                         title: 'Rest & Recover',
+                        type: 'info',
                         desc: 'No hanging or climbing. Allow tendon collagen to rebuild.',
                         durationMinutes: 0,
                         restSeconds: 0,
@@ -471,32 +573,38 @@ const Planner = (function () {
                     {
                         name: 'Antagonist Care (25m)',
                         title: 'Antagonist Care',
+                        type: 'workout',
                         desc: 'Reverse wrist curls, pushups, finger extensor bands (3x15).',
                         durationMinutes: 25,
                         restSeconds: 60,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_ANTAGONIST
                     },
                     {
                         name: 'Deep Mobility & Tissue Work (35m)',
                         title: 'Deep Mobility & Tissue Work',
+                        type: 'workout',
                         desc: 'Hip openers, thoracic spine rotations, shoulder dislocates.',
                         durationMinutes: 35,
-                        restSeconds: 60,
+                        restSeconds: 45,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_MOBILITY
                     },
                     {
                         name: 'Core & Stability (30m)',
                         title: 'Core & Stability',
-                        desc: 'Hollow holds, side planks, scapular pull-ins.',
+                        type: 'workout',
+                        desc: 'Hollow holds, side planks, bird-dogs.',
                         durationMinutes: 30,
-                        restSeconds: 60,
+                        restSeconds: 45,
                         targetGradeIdx: null,
                         targetGradeStr: null,
-                        targetTags: []
+                        targetTags: [],
+                        exercises: EXERCISES_CORE
                     }
                 ];
             }
@@ -518,6 +626,7 @@ const Planner = (function () {
                     {
                         name: 'Movement Warmup (10m)',
                         title: 'Movement Warmup',
+                        type: 'climb',
                         desc: `Build easily from ${warmupEntryStr} to ${warmupMidStr}. Focus on silent feet and precision.`,
                         durationMinutes: 10,
                         restSeconds: 60,
@@ -528,6 +637,7 @@ const Planner = (function () {
                     {
                         name: 'Density Volume Ladder (30m)',
                         title: 'Density Volume Ladder',
+                        type: 'climb',
                         desc: `Complete 6–8 boulders strictly between ${warmupMidStr} and ${volumeCircuitStr} with 90s rest.`,
                         durationMinutes: 30,
                         restSeconds: 90,
@@ -538,6 +648,7 @@ const Planner = (function () {
                     {
                         name: 'Cool Down (5m)',
                         title: 'Cool Down',
+                        type: 'climb',
                         desc: `2 easy movement slabs at ${coolDownStr} or below.`,
                         durationMinutes: 5,
                         restSeconds: 60,
@@ -552,6 +663,7 @@ const Planner = (function () {
                     {
                         name: 'Movement Warmup (20m)',
                         title: 'Movement Warmup',
+                        type: 'climb',
                         desc: `Build gradually from ${warmupEntryStr} to ${warmupMidStr}. Focus on silent feet and precision.`,
                         durationMinutes: 20,
                         restSeconds: 60,
@@ -562,6 +674,7 @@ const Planner = (function () {
                     {
                         name: 'Block 1: Volume Circuit (45m)',
                         title: 'Volume Circuit (Block 1)',
+                        type: 'climb',
                         desc: `8–10 boulders strictly between ${warmupMidStr} and ${volumeCircuitStr}. Rest 2 min between sends.`,
                         durationMinutes: 45,
                         restSeconds: 120,
@@ -572,6 +685,7 @@ const Planner = (function () {
                     {
                         name: 'Mid-Session System Flush (10m)',
                         title: 'Mid-Session System Flush',
+                        type: 'info',
                         desc: 'Active walk, rehydrate, and shake out forearm tissues. Zero climbing.',
                         durationMinutes: 10,
                         restSeconds: 0,
@@ -582,6 +696,7 @@ const Planner = (function () {
                     {
                         name: 'Block 2: Technical Precision (35m)',
                         title: 'Technical Flow (Block 2)',
+                        type: 'climb',
                         desc: `6–8 boulders on slabs and slopers at ${warmupMidStr} with silent feet and zero re-gripping.`,
                         durationMinutes: 35,
                         restSeconds: 90,
@@ -592,12 +707,14 @@ const Planner = (function () {
                     {
                         name: 'Cool Down & Antagonists (10m)',
                         title: 'Cool Down & Antagonists',
-                        desc: `2 easy slabs at ${coolDownStr} plus light antagonist wrist/shoulder stretching.`,
+                        type: 'workout',
+                        desc: `2 easy slabs at ${coolDownStr} plus light pushups and extensor bands.`,
                         durationMinutes: 10,
                         restSeconds: 60,
                         targetGradeIdx: coolDownIdx,
                         targetGradeStr: coolDownStr,
-                        targetTags: ['slab', 'sloper']
+                        targetTags: ['slab', 'sloper'],
+                        exercises: EXERCISES_ANTAGONIST.slice(0, 2)
                     }
                 ];
             } else {
@@ -606,6 +723,7 @@ const Planner = (function () {
                     {
                         name: 'Movement Warmup (20m)',
                         title: 'Movement Warmup',
+                        type: 'climb',
                         desc: `Build gradually from ${warmupEntryStr} to ${warmupMidStr}. Focus on silent feet and precision.`,
                         durationMinutes: 20,
                         restSeconds: 60,
@@ -616,6 +734,7 @@ const Planner = (function () {
                     {
                         name: 'Volume Circuit (50m)',
                         title: 'Volume Circuit',
+                        type: 'climb',
                         desc: `Complete 10–14 boulders strictly between ${warmupMidStr} and ${volumeCircuitStr}. Rest 2 min between sends.`,
                         durationMinutes: 50,
                         restSeconds: 120,
@@ -626,6 +745,7 @@ const Planner = (function () {
                     {
                         name: 'Technical Drill (15m)',
                         title: 'Technical Drill',
+                        type: 'climb',
                         desc: `Practice 3 slab or dynamic balance boulders at ${warmupMidStr} with zero re-gripping.`,
                         durationMinutes: 15,
                         restSeconds: 90,
@@ -636,6 +756,7 @@ const Planner = (function () {
                     {
                         name: 'Cool Down (5m)',
                         title: 'Cool Down',
+                        type: 'climb',
                         desc: `2 easy slabs at ${coolDownStr} or below.`,
                         durationMinutes: 5,
                         restSeconds: 60,
@@ -658,6 +779,7 @@ const Planner = (function () {
                     {
                         name: 'Warmup Pyramid (12m)',
                         title: 'Warmup Pyramid',
+                        type: 'climb',
                         desc: `1x ${warmupEntryStr}, 1x ${warmupMidStr}, 1x ${warmupPeakStr}. Crisp movement with 75s rest.`,
                         durationMinutes: 12,
                         restSeconds: 75,
@@ -668,6 +790,7 @@ const Planner = (function () {
                     {
                         name: 'CNS Priming (5m)',
                         title: 'CNS Priming',
+                        type: 'climb',
                         desc: `1 single crisp flash attempt on ${cnsPrimeStr} to potentiate recruitment.`,
                         durationMinutes: 5,
                         restSeconds: 90,
@@ -678,6 +801,7 @@ const Planner = (function () {
                     {
                         name: 'Laser Project Phase (23m)',
                         title: 'Laser Project Phase',
+                        type: 'climb',
                         desc: `Work 1 specific project at ${projectTargetStr}. Exactly 4 high-quality burns with 3.5m rest.`,
                         durationMinutes: 23,
                         restSeconds: 210,
@@ -688,6 +812,7 @@ const Planner = (function () {
                     {
                         name: 'Cool Down (5m)',
                         title: 'Cool Down',
+                        type: 'climb',
                         desc: `Easy slab at ${coolDownStr} or below and antagonist stretching.`,
                         durationMinutes: 5,
                         restSeconds: 60,
@@ -702,6 +827,7 @@ const Planner = (function () {
                     {
                         name: 'Comprehensive Warmup (25m)',
                         title: 'Comprehensive Warmup',
+                        type: 'climb',
                         desc: `1x ${warmupEntryStr}, 2x ${warmupMidStr}, 1x ${warmupPeakStr}. Full 3m rest after last warmup.`,
                         durationMinutes: 25,
                         restSeconds: 90,
@@ -712,6 +838,7 @@ const Planner = (function () {
                     {
                         name: 'CNS Priming & Potentiation (15m)',
                         title: 'CNS Priming & Potentiation',
+                        type: 'climb',
                         desc: `2 single-burn high-tension attempts on ${cnsPrimeStr} with 2.5m rest.`,
                         durationMinutes: 15,
                         restSeconds: 150,
@@ -722,6 +849,7 @@ const Planner = (function () {
                     {
                         name: 'Primary Limit Project (40m)',
                         title: 'Primary Limit Project',
+                        type: 'climb',
                         desc: `4–5 max-effort burns on your main project at ${projectTargetStr}. Strict 4.5m ATP-CP recovery rest between burns.`,
                         durationMinutes: 40,
                         restSeconds: 270,
@@ -732,6 +860,7 @@ const Planner = (function () {
                     {
                         name: 'Secondary Style Project (30m)',
                         title: 'Secondary Style Project',
+                        type: 'climb',
                         desc: `3–4 burns on a contrasting problem style at ${cnsPrimeStr} or ${projectTargetStr}. 4m rest between burns.`,
                         durationMinutes: 30,
                         restSeconds: 240,
@@ -742,12 +871,14 @@ const Planner = (function () {
                     {
                         name: 'Structural Care & Cooldown (10m)',
                         title: 'Structural Care & Cooldown',
+                        type: 'workout',
                         desc: `2 recovery slabs at ${coolDownStr} plus pushups and extensor bands.`,
                         durationMinutes: 10,
                         restSeconds: 60,
                         targetGradeIdx: coolDownIdx,
                         targetGradeStr: coolDownStr,
-                        targetTags: ['slab', 'sloper']
+                        targetTags: ['slab', 'sloper'],
+                        exercises: EXERCISES_ANTAGONIST.slice(0, 2)
                     }
                 ];
             } else {
@@ -756,6 +887,7 @@ const Planner = (function () {
                     {
                         name: 'Warmup Pyramid (25m)',
                         title: 'Warmup Pyramid',
+                        type: 'climb',
                         desc: `1x ${warmupEntryStr}, 2x ${warmupMidStr}, 1x ${warmupPeakStr}. Full 3m rest after last warmup.`,
                         durationMinutes: 25,
                         restSeconds: 90,
@@ -766,6 +898,7 @@ const Planner = (function () {
                     {
                         name: 'CNS Priming (10m)',
                         title: 'CNS Priming',
+                        type: 'climb',
                         desc: `1 high-effort flash attempt on ${cnsPrimeStr} to activate recruitment.`,
                         durationMinutes: 10,
                         restSeconds: 120,
@@ -776,6 +909,7 @@ const Planner = (function () {
                     {
                         name: 'Limit Project Phase (45m)',
                         title: 'Limit Project Phase',
+                        type: 'climb',
                         desc: `Work 1-2 projects at ${projectTargetStr}. Take 4 minutes full rest between burns. Max 5 burns total.`,
                         durationMinutes: 45,
                         restSeconds: 240,
@@ -786,12 +920,14 @@ const Planner = (function () {
                     {
                         name: 'Cool Down & Antagonists (10m)',
                         title: 'Cool Down & Antagonists',
+                        type: 'workout',
                         desc: `2 very easy slabs at ${coolDownStr} or below and light antagonist stretching.`,
                         durationMinutes: 10,
                         restSeconds: 60,
                         targetGradeIdx: coolDownIdx,
                         targetGradeStr: coolDownStr,
-                        targetTags: ['slab', 'sloper']
+                        targetTags: ['slab', 'sloper'],
+                        exercises: EXERCISES_ANTAGONIST.slice(0, 2)
                     }
                 ];
             }
@@ -1240,6 +1376,9 @@ const Planner = (function () {
     return {
         GRADES,
         STYLE_STRESS,
+        WORKOUT_PRESETS,
+        getWorkoutPresets: () => WORKOUT_PRESETS,
+        getWorkoutPreset: (id) => WORKOUT_PRESETS.find(p => p.id === id),
         resolveMaxGradeIdx,
         calculateSessionLoad,
         computeWorkloadMetrics,
@@ -1400,6 +1539,36 @@ function renderPlannerUI() {
                 }
             }
         });
+
+        // 6. Render Off-Wall Workout Presets Library
+        const presetsContainer = document.getElementById('plannerWorkoutPresetsList');
+        if (presetsContainer) {
+            const presets = Planner.getWorkoutPresets();
+            presetsContainer.innerHTML = presets.map(p => `
+                <div class="bg-neutral-900/80 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-sm hover:border-neutral-700 transition-all">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">${p.icon}</span>
+                            <div>
+                                <h4 class="text-xs font-black text-white leading-tight">${p.name}</h4>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 uppercase">${p.badge}</span>
+                                    <span class="text-neutral-700 text-[8px]">●</span>
+                                    <span class="text-[9px] text-neutral-400 font-bold">${p.durationMinutes}m</span>
+                                    <span class="text-neutral-700 text-[8px]">●</span>
+                                    <span class="text-[9px] text-emerald-400 font-bold">${p.exercises.length} Exercises</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-neutral-400 leading-snug">${p.desc}</p>
+                    <button onclick="startPresetWorkout('${p.id}')" class="w-full py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-emerald-500/20 text-neutral-200 hover:text-emerald-400 border border-neutral-700 hover:border-emerald-500/40 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+                        <span>💪</span>
+                        <span>Start Workout</span>
+                    </button>
+                </div>
+            `).join('');
+        }
 
     } catch (e) {
         console.error('renderPlannerUI error:', e);

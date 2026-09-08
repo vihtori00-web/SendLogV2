@@ -108,6 +108,10 @@
         let sessionScore = 0;
         let sessionClimbs = [];
         let climbIdCounter = 0;
+        let sessionWorkouts = [];
+        let activeLogMode = 'climb';
+        let activeWorkoutPreset = null;
+        let activeWorkoutExIndex = 0;
         let selectedTags = [];
         window.historyViewMode = 'ALL';
         var historyViewMode = 'ALL';
@@ -615,6 +619,10 @@
                     sessionStartTime,
                     sessionScore,
                     sessionClimbs,
+                    sessionWorkouts,
+                    activeLogMode,
+                    activeWorkoutPreset,
+                    activeWorkoutExIndex,
                     // Coach workout state persistence
                     trainingActive,
                     coachPhaseIndex,
@@ -640,10 +648,14 @@
                 const data = localStorage.getItem('boulderActiveSession');
                 if (!data) return;
                 const active = JSON.parse(data);
-                if (active.sessionStartTime || (active.sessionClimbs && active.sessionClimbs.length > 0)) {
+                if (active.sessionStartTime || (active.sessionClimbs && active.sessionClimbs.length > 0) || (active.sessionWorkouts && active.sessionWorkouts.length > 0)) {
                     sessionStartTime = active.sessionStartTime || Date.now();
                     sessionScore = active.sessionScore || 0;
                     sessionClimbs = active.sessionClimbs || [];
+                    sessionWorkouts = active.sessionWorkouts || [];
+                    activeLogMode = active.activeLogMode || 'climb';
+                    activeWorkoutPreset = active.activeWorkoutPreset || null;
+                    activeWorkoutExIndex = active.activeWorkoutExIndex || 0;
 
                     // Restore climbIdCounter to avoid collisions
                     if (sessionClimbs.length > 0) {
@@ -667,6 +679,12 @@
                         trainingState = active.trainingState || 'climb';
                         trainingCurrentGradeIndex = active.trainingCurrentGradeIndex || 0;
                         restoreTrainingUI();
+                    }
+
+                    if (activeLogMode === 'workout') {
+                        switchLogMode('workout');
+                    } else if (activeWorkoutPreset) {
+                        renderWorkoutHUD();
                     }
 
                     renderSessionList();
@@ -883,6 +901,279 @@
             renderTags();
         }
 
+        // ==========================================
+        // DUAL-MODE LOGGING: OFF-WALL WORKOUT TRACKER
+        // ==========================================
+        function switchLogMode(mode) {
+            if (mode !== 'climb' && mode !== 'workout') return;
+            activeLogMode = mode;
+
+            const modeBtnClimb = document.getElementById('modeBtnClimb');
+            const modeBtnWorkout = document.getElementById('modeBtnWorkout');
+            const climbingWrapper = document.getElementById('climbingControlsWrapper');
+            const workoutWrapper = document.getElementById('workoutModeContainer');
+
+            if (mode === 'climb') {
+                if (modeBtnClimb) {
+                    modeBtnClimb.className = "px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-emerald-500 text-black shadow-sm flex items-center gap-1.5";
+                }
+                if (modeBtnWorkout) {
+                    modeBtnWorkout.className = "px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all text-neutral-400 hover:text-white flex items-center gap-1.5";
+                }
+                if (climbingWrapper) {
+                    climbingWrapper.classList.remove('hidden');
+                    climbingWrapper.classList.add('flex');
+                }
+                if (workoutWrapper) {
+                    workoutWrapper.classList.remove('flex');
+                    workoutWrapper.classList.add('hidden');
+                }
+            } else {
+                if (modeBtnWorkout) {
+                    modeBtnWorkout.className = "px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-emerald-500 text-black shadow-sm flex items-center gap-1.5";
+                }
+                if (modeBtnClimb) {
+                    modeBtnClimb.className = "px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all text-neutral-400 hover:text-white flex items-center gap-1.5";
+                }
+                if (climbingWrapper) {
+                    climbingWrapper.classList.remove('flex');
+                    climbingWrapper.classList.add('hidden');
+                }
+                if (workoutWrapper) {
+                    workoutWrapper.classList.remove('hidden');
+                    workoutWrapper.classList.add('flex');
+                }
+
+                // If no active workout preset loaded, load the default
+                if (!activeWorkoutPreset) {
+                    if (typeof Planner !== 'undefined' && typeof Planner.getWorkoutPresets === 'function') {
+                        const presets = Planner.getWorkoutPresets();
+                        if (presets && presets.length > 0) {
+                            initWorkoutPreset(presets[0]);
+                        }
+                    }
+                }
+                renderWorkoutHUD();
+            }
+
+            saveActiveSession();
+        }
+        window.switchLogMode = switchLogMode;
+
+        function initWorkoutPreset(preset) {
+            if (!preset) return;
+            // Check if already in sessionWorkouts
+            let existing = sessionWorkouts.find(w => w.id === preset.id);
+            if (existing) {
+                activeWorkoutPreset = existing;
+            } else {
+                activeWorkoutPreset = {
+                    id: preset.id,
+                    name: preset.name,
+                    shortName: preset.shortName || preset.name,
+                    category: preset.category,
+                    icon: preset.icon,
+                    badge: preset.badge,
+                    durationMinutes: preset.durationMinutes,
+                    desc: preset.desc,
+                    exercises: (preset.exercises || []).map(ex => ({
+                        id: ex.id,
+                        name: ex.name,
+                        sets: typeof ex.sets === 'number' ? ex.sets : 3,
+                        reps: ex.reps || '10 reps',
+                        restSeconds: ex.restSeconds || 60,
+                        desc: ex.desc || '',
+                        completedSets: ex.completedSets || 0
+                    }))
+                };
+                sessionWorkouts.push(activeWorkoutPreset);
+            }
+            activeWorkoutExIndex = 0;
+        }
+
+        function startPresetWorkout(presetId) {
+            if (!sessionStartTime) {
+                startSession();
+            }
+            let preset = null;
+            if (typeof Planner !== 'undefined' && typeof Planner.getWorkoutPreset === 'function') {
+                preset = Planner.getWorkoutPreset(presetId);
+            }
+            if (!preset && typeof Planner !== 'undefined' && typeof Planner.getWorkoutPresets === 'function') {
+                const list = Planner.getWorkoutPresets();
+                if (list && list.length > 0) preset = list[0];
+            }
+            if (preset) {
+                initWorkoutPreset(preset);
+            }
+            switchLogMode('workout');
+            switchTab('log');
+            if ('vibrate' in navigator) navigator.vibrate([20, 40, 20]);
+        }
+        window.startPresetWorkout = startPresetWorkout;
+
+        function renderWorkoutHUD() {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises || activeWorkoutPreset.exercises.length === 0) return;
+
+            const exercises = activeWorkoutPreset.exercises;
+            if (activeWorkoutExIndex < 0) activeWorkoutExIndex = 0;
+            if (activeWorkoutExIndex >= exercises.length) activeWorkoutExIndex = exercises.length - 1;
+
+            const currentEx = exercises[activeWorkoutExIndex];
+
+            // Update banner
+            const bannerIcon = document.getElementById('workoutBannerIcon');
+            const bannerTitle = document.getElementById('workoutBannerTitle');
+            if (bannerIcon) bannerIcon.innerText = activeWorkoutPreset.icon || '💪';
+            if (bannerTitle) bannerTitle.innerText = activeWorkoutPreset.shortName || activeWorkoutPreset.name;
+
+            // Update Exercise Card
+            const catBadge = document.getElementById('workoutExCategoryBadge');
+            const exProgress = document.getElementById('workoutExProgress');
+            const exTitle = document.getElementById('workoutExTitle');
+            const exTarget = document.getElementById('workoutExTarget');
+            const exDesc = document.getElementById('workoutExDesc');
+            const restBtnLabel = document.getElementById('workoutRestBtnLabel');
+
+            if (catBadge) catBadge.innerText = activeWorkoutPreset.badge || 'Workout';
+            if (exProgress) exProgress.innerText = `Exercise ${activeWorkoutExIndex + 1} of ${exercises.length}`;
+            if (exTitle) exTitle.innerText = currentEx.name;
+            if (exTarget) exTarget.innerText = `${currentEx.sets} sets × ${currentEx.reps}`;
+            if (exDesc) exDesc.innerText = currentEx.desc || '';
+            if (restBtnLabel) restBtnLabel.innerText = `Rest ${currentEx.restSeconds || 60}s`;
+
+            // Navigation Buttons
+            const btnPrev = document.getElementById('btnPrevExercise');
+            const btnNext = document.getElementById('btnNextExercise');
+            if (btnPrev) {
+                btnPrev.disabled = activeWorkoutExIndex === 0;
+                btnPrev.style.opacity = activeWorkoutExIndex === 0 ? '0.4' : '1';
+            }
+            if (btnNext) {
+                const isLast = activeWorkoutExIndex === exercises.length - 1;
+                btnNext.innerText = isLast ? 'Done ✓' : 'Next ▶';
+            }
+
+            // Render Sets Grid
+            const setsGrid = document.getElementById('workoutSetsGrid');
+            if (setsGrid) {
+                const totalSets = currentEx.sets || 3;
+                const completedSets = currentEx.completedSets || 0;
+                let setsHtml = '';
+                for (let s = 0; s < totalSets; s++) {
+                    const isDone = s < completedSets;
+                    setsHtml += `
+                        <button onclick="toggleWorkoutSet(${s})" class="py-2.5 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 border ${
+                            isDone
+                                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-sm'
+                                : 'bg-neutral-800/80 border-neutral-700/80 text-neutral-300 hover:border-neutral-500'
+                        }">
+                            <span>${isDone ? '✓' : '○'}</span>
+                            <span>Set ${s + 1}</span>
+                        </button>
+                    `;
+                }
+                setsGrid.innerHTML = setsHtml;
+            }
+        }
+        window.renderWorkoutHUD = renderWorkoutHUD;
+
+        function toggleWorkoutSet(setIdx) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            const currentCompleted = currentEx.completedSets || 0;
+            if (setIdx === currentCompleted) {
+                // Completing next set
+                currentEx.completedSets = currentCompleted + 1;
+                if ('vibrate' in navigator) navigator.vibrate([15, 30, 15]);
+                if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('work');
+
+                // Trigger chalk-friendly rest timer
+                const restSecs = currentEx.restSeconds || 60;
+                if (typeof window.startRestTimer === 'function') {
+                    window.startRestTimer(restSecs, true);
+                }
+            } else if (setIdx < currentCompleted) {
+                // Tapping an already completed set: undo back to this set
+                currentEx.completedSets = setIdx;
+                if ('vibrate' in navigator) navigator.vibrate(10);
+            } else {
+                // Tapping set ahead: mark up to this set
+                currentEx.completedSets = setIdx + 1;
+                if ('vibrate' in navigator) navigator.vibrate([15, 30, 15]);
+                const restSecs = currentEx.restSeconds || 60;
+                if (typeof window.startRestTimer === 'function') {
+                    window.startRestTimer(restSecs, true);
+                }
+            }
+
+            if (!sessionStartTime) {
+                startSession();
+            }
+
+            recomputeSessionScore();
+            renderWorkoutHUD();
+            renderSessionList();
+            saveActiveSession();
+        }
+        window.toggleWorkoutSet = toggleWorkoutSet;
+
+        function navWorkoutExercise(dir) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const exercises = activeWorkoutPreset.exercises;
+
+            if (dir > 0 && activeWorkoutExIndex === exercises.length - 1) {
+                // User pressed Done on final exercise
+                if ('vibrate' in navigator) navigator.vibrate([20, 50, 20]);
+                if (typeof confetti === 'function') {
+                    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 }, colors: ['#10b981', '#3b82f6'] });
+                }
+                switchTab('session');
+                return;
+            }
+
+            activeWorkoutExIndex = Math.max(0, Math.min(exercises.length - 1, activeWorkoutExIndex + dir));
+            if ('vibrate' in navigator) navigator.vibrate(15);
+            renderWorkoutHUD();
+            saveActiveSession();
+        }
+        window.navWorkoutExercise = navWorkoutExercise;
+
+        function triggerWorkoutRest() {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            const restSecs = (currentEx && currentEx.restSeconds) ? currentEx.restSeconds : 60;
+            if (typeof window.startRestTimer === 'function') {
+                window.startRestTimer(restSecs, true);
+            }
+        }
+        window.triggerWorkoutRest = triggerWorkoutRest;
+
+        function openWorkoutPresetPicker() {
+            switchTab('planner');
+            setTimeout(() => {
+                const el = document.getElementById('plannerWorkoutPresetsList');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+        window.openWorkoutPresetPicker = openWorkoutPresetPicker;
+
+        function recomputeSessionScore() {
+            const climbPts = (sessionClimbs || []).reduce((acc, c) => acc + (c.points || 0), 0);
+            const workoutPts = (sessionWorkouts || []).reduce((acc, w) => {
+                return acc + (w.exercises || []).reduce((eAcc, ex) => eAcc + ((ex.completedSets || 0) * 10), 0);
+            }, 0);
+            sessionScore = climbPts + workoutPts;
+            const scoreEl = document.getElementById('sessionScoreDisplay');
+            if (scoreEl) scoreEl.innerText = sessionScore;
+            return sessionScore;
+        }
+        window.recomputeSessionScore = recomputeSessionScore;
+        window.getSessionWorkouts = () => sessionWorkouts;
+        window.getActiveLogMode = () => activeLogMode;
+
         const tryPtsMap   = [1, 2, 3, 5, 8, 12, 18, 25];
         const topBonusMap = [3, 5, 8, 12, 22, 35, 55, 80];
         const flashBonusMap = [2, 3, 5, 8, 15, 25, 40, 60];
@@ -1010,14 +1301,39 @@
         // -- LOGIC: RENDER & DELETE SESSION CLIMBS --
         function renderSessionList() {
             const listEl = document.getElementById('sessionList');
+            recomputeSessionScore();
             document.getElementById('sessionScoreDisplay').innerText = sessionScore;
 
-            if (sessionClimbs.length === 0) {
-                listEl.innerHTML = '<li class="text-neutral-500 text-center mt-10 text-sm">No climbs logged yet.</li>';
+            let workoutItemsHtml = '';
+            if (sessionWorkouts && sessionWorkouts.length > 0) {
+                sessionWorkouts.forEach(w => {
+                    const completedSetsCount = (w.exercises || []).reduce((acc, ex) => acc + (ex.completedSets || 0), 0);
+                    const totalSetsCount = (w.exercises || []).reduce((acc, ex) => acc + (ex.sets || 0), 0);
+                    if (completedSetsCount > 0) {
+                        workoutItemsHtml += `
+                            <li class="flex justify-between items-center p-2.5 bg-neutral-850/80 rounded-xl border border-cyan-500/30">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xl">${w.icon || '💪'}</span>
+                                    <div class="flex flex-col">
+                                        <span class="text-xs font-black text-white leading-tight">${w.shortName || w.name}</span>
+                                        <span class="text-[10px] text-cyan-400 font-bold">${completedSetsCount}/${totalSetsCount} Sets Completed</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-emerald-400 font-bold text-sm">+${completedSetsCount * 10} pts</span>
+                                </div>
+                            </li>
+                        `;
+                    }
+                });
+            }
+
+            if (sessionClimbs.length === 0 && !workoutItemsHtml) {
+                listEl.innerHTML = '<li class="text-neutral-500 text-center mt-10 text-sm">No climbs or workouts logged yet.</li>';
                 return;
             }
 
-            listEl.innerHTML = sessionClimbs.map(c => `
+            const climbsHtml = sessionClimbs.map(c => `
                 <li class="flex justify-between items-center p-2.5 bg-neutral-800/50 rounded-xl border border-neutral-700/30">
                     <div class="flex items-center gap-3">
                         <div class="flex flex-col items-center justify-center w-8">
@@ -1038,6 +1354,8 @@
                     </div>
                 </li>
             `).join('');
+
+            listEl.innerHTML = workoutItemsHtml + climbsHtml;
         }
 
         function checkLiveFatigueAlert() {
@@ -1245,6 +1563,33 @@
             const phase = coachPlan.phases[index];
 
             hideCoachAdaptiveBanner();
+
+            // Auto-switch mode based on phase type
+            if (phase.type === 'workout' && Array.isArray(phase.exercises) && phase.exercises.length > 0) {
+                const workoutObj = {
+                    id: 'coach_phase_' + index,
+                    name: phase.title || 'Workout Circuit',
+                    shortName: phase.title || 'Workout',
+                    category: 'prehab',
+                    icon: '💪',
+                    badge: 'Coach',
+                    durationMinutes: phase.durationMinutes || 15,
+                    desc: phase.desc || 'Complete the targeted exercise sets recommended by your coach.',
+                    exercises: phase.exercises.map(ex => ({
+                        id: ex.id,
+                        name: ex.name,
+                        sets: typeof ex.sets === 'number' ? ex.sets : 3,
+                        reps: ex.reps || '10 reps',
+                        restSeconds: ex.restSeconds || 60,
+                        desc: ex.desc || '',
+                        completedSets: ex.completedSets || 0
+                    }))
+                };
+                initWorkoutPreset(workoutObj);
+                switchLogMode('workout');
+            } else {
+                switchLogMode('climb');
+            }
 
             // Set current logger grade to phase target grade if valid
             if (phase.targetGradeIdx !== null && phase.targetGradeIdx !== undefined) {
@@ -1594,8 +1939,9 @@
         window.restoreTrainingUI = restoreTrainingUI;
 
         function endSession() {
-            if (sessionClimbs.length === 0) {
-                if (!confirm("You haven't logged any climbs. End session with 0 points?")) {
+            const hasCompletedWorkouts = sessionWorkouts && sessionWorkouts.some(w => (w.exercises || []).some(e => (e.completedSets || 0) > 0));
+            if (sessionClimbs.length === 0 && !hasCompletedWorkouts) {
+                if (!confirm("You haven't logged any climbs or workouts. End session with 0 points?")) {
                     return;
                 }
             }
@@ -1623,7 +1969,8 @@
                 timestamp: Date.now(),
                 score: sessionScore,
                 duration: durationSeconds,
-                climbs: [...sessionClimbs]
+                climbs: [...sessionClimbs],
+                workouts: [...sessionWorkouts]
             });
             localStorage.setItem('boulderHistory', JSON.stringify(boulderHistory));
             localStorage.removeItem('boulderActiveSession');
@@ -1640,7 +1987,11 @@
                     bestName = c.gradeStr || "-";
                 }
             });
-            if (bestScore === -1 && sessionClimbs.length > 0) bestName = sessionClimbs[0].gradeStr || "V?";
+            if (bestScore === -1 && sessionClimbs.length > 0) {
+                bestName = sessionClimbs[0].gradeStr || "V?";
+            } else if (bestScore === -1 && hasCompletedWorkouts) {
+                bestName = sessionWorkouts[0].shortName || sessionWorkouts[0].name || "Workout";
+            }
 
             const durationMinutes = Math.round(durationSeconds / 60);
 
@@ -1683,7 +2034,15 @@
             toggleSessionButtonUI(false);
             if ('vibrate' in navigator) navigator.vibrate(30);
 
-            sessionScore = 0; sessionClimbs = [];
+            sessionScore = 0;
+            sessionClimbs = [];
+            sessionWorkouts = [];
+            activeWorkoutPreset = null;
+            activeWorkoutExIndex = 0;
+            switchLogMode('climb');
+            renderSessionList();
+            if (typeof renderHistoryList === 'function') renderHistoryList();
+            if (typeof updateAnalytics === 'function') updateAnalytics();
             const alertBox = document.getElementById('liveFatigueAlert');
             if (alertBox) alertBox.classList.add('hidden');
             const feedbackContainer = document.getElementById('sessionFeedbackContainer');
