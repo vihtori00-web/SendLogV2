@@ -285,21 +285,77 @@
 
                 <!-- Interactive Off-Wall Workout Container (Hidden by default, shown when mode is 'workout') -->
                 <div id="workoutModeContainer" class="hidden flex-col justify-between flex-1 gap-3">
+                    <!-- Quick Horizontal Preset Chips (1-tap switch) -->
+                    <div id="workoutTypeQuickSelector" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
+                        <button onclick="selectWorkoutPreset('bench_press')" id="quickChip_bench_press" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm">🏋️ Bench Press</button>
+                        <button onclick="selectWorkoutPreset('antagonist_armor')" id="quickChip_antagonist_armor" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🛡️ Antagonist</button>
+                        <button onclick="selectWorkoutPreset('repeaters_7_3')" id="quickChip_repeaters_7_3" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">⚡ Repeaters</button>
+                        <button onclick="selectWorkoutPreset('max_hangs')" id="quickChip_max_hangs" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🧗 Max Hangs</button>
+                        <button onclick="selectWorkoutPreset('climber_core')" id="quickChip_climber_core" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">💪 Core</button>
+                        <button onclick="selectWorkoutPreset('mobility_flow')" id="quickChip_mobility_flow" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🧘 Mobility</button>
+                    </div>
+
                     <div class="bg-neutral-900/95 border border-neutral-800 rounded-[2rem] p-5 shadow-lg flex flex-col justify-between flex-1">
                         <div>
                             <div class="flex items-center justify-between gap-2 mb-2">
-                                <span id="workoutExCategoryBadge" class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Prehab</span>
+                                <span id="workoutExCategoryBadge" class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Strength</span>
                                 <span id="workoutExProgress" class="text-[10px] font-mono text-neutral-400 font-bold">Exercise 1 of 4</span>
                             </div>
-                            <h3 id="workoutExTitle" class="text-xl sm:text-2xl font-black text-white leading-tight">Pushups</h3>
-                            <p id="workoutExTarget" class="text-xs font-bold text-emerald-400 mt-1">3 sets × 15 reps</p>
-                            <p id="workoutExDesc" class="text-xs text-neutral-400 leading-snug mt-2">Engage serratus anterior and chest antagonists to balance pulling muscles.</p>
+                            <h3 id="workoutExTitle" class="text-xl sm:text-2xl font-black text-white leading-tight">Barbell Bench Press</h3>
+                            <p id="workoutExTarget" class="text-xs font-bold text-emerald-400 mt-1">4 sets × 6 reps</p>
+                            <p id="workoutExDesc" class="text-xs text-neutral-400 leading-snug mt-2">Touch chest with control, drive upward with active scapular retraction.</p>
+                        </div>
+
+                        <!-- Weight & Reps Stepper (Active when exercise tracks weight) -->
+                        <div id="workoutWeightRepsContainer" class="hidden my-3 p-3 bg-neutral-950/90 rounded-2xl border border-neutral-800 flex flex-col gap-2.5 shadow-inner">
+                            <div class="flex items-center justify-between gap-2">
+                                <!-- Weight Stepper -->
+                                <div class="flex-1 flex flex-col items-center">
+                                    <span class="text-[9px] uppercase font-black tracking-wider text-neutral-500 mb-1">Weight</span>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" onclick="adjWorkoutWeight(-2.5)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">-</button>
+                                        <div class="flex items-baseline bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800">
+                                            <input type="number" id="workoutInputWeight" step="0.5" min="0" max="400" value="60" onchange="setWorkoutWeight(this.value)" class="w-12 bg-transparent text-center font-black text-white text-base focus:outline-none">
+                                            <span class="text-[10px] text-neutral-400 font-bold ml-0.5">kg</span>
+                                        </div>
+                                        <button type="button" onclick="adjWorkoutWeight(2.5)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">+</button>
+                                    </div>
+                                    <div class="flex items-center gap-1 mt-1">
+                                        <button type="button" onclick="adjWorkoutWeight(-5)" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">-5</button>
+                                        <button type="button" onclick="adjWorkoutWeight(5)" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">+5</button>
+                                    </div>
+                                </div>
+
+                                <div class="w-px h-10 bg-neutral-800 self-center"></div>
+
+                                <!-- Reps Stepper -->
+                                <div class="flex-1 flex flex-col items-center">
+                                    <span class="text-[9px] uppercase font-black tracking-wider text-neutral-500 mb-1">Target Reps</span>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" onclick="adjWorkoutReps(-1)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">-</button>
+                                        <div class="flex items-baseline bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800">
+                                            <input type="number" id="workoutInputReps" min="1" max="100" value="6" onchange="setWorkoutReps(this.value)" class="w-10 bg-transparent text-center font-black text-white text-base focus:outline-none">
+                                            <span class="text-[10px] text-neutral-400 font-bold ml-0.5">reps</span>
+                                        </div>
+                                        <button type="button" onclick="adjWorkoutReps(1)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">+</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- PR & Quick History Link -->
+                            <div class="flex items-center justify-between pt-2 border-t border-neutral-800/80 text-[10px]">
+                                <span id="workoutExPRBadge" class="font-bold text-amber-400 truncate">🏆 PR: --</span>
+                                <button type="button" onclick="openExerciseProgressModal()" class="font-bold text-emerald-400 hover:underline flex items-center gap-1">
+                                    <span>📈</span>
+                                    <span>History</span>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Interactive Set Checkboxes -->
-                        <div class="my-4">
-                            <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Tap set to complete & start rest timer:</p>
-                            <div id="workoutSetsGrid" class="grid grid-cols-3 gap-2.5">
+                        <div class="my-3">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Tap set to log weight & reps:</p>
+                            <div id="workoutSetsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 <!-- Dynamic set buttons injected by renderWorkoutHUD() -->
                             </div>
                         </div>
@@ -308,7 +364,7 @@
                         <div class="flex items-center justify-between pt-3 border-t border-neutral-800/80">
                             <button id="workoutRestTriggerBtn" onclick="triggerWorkoutRest()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 active:scale-95 text-xs font-bold border border-neutral-700">
                                 <span>⏱️</span>
-                                <span id="workoutRestBtnLabel">Rest 60s</span>
+                                <span id="workoutRestBtnLabel">Rest 180s</span>
                             </button>
                             <div class="flex gap-2">
                                 <button id="btnPrevExercise" onclick="navWorkoutExercise(-1)" class="px-3 py-2 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-700 active:scale-95 text-xs font-bold">◀ Prev</button>
@@ -320,10 +376,19 @@
                     <!-- Quick Preset Switcher Banner in Workout Mode -->
                     <div id="workoutActiveInfoBanner" class="bg-neutral-900/80 border border-neutral-800 rounded-2xl px-4 py-2.5 flex items-center justify-between shadow-sm shrink-0">
                         <div class="flex items-center gap-2 min-w-0">
-                            <span id="workoutBannerIcon" class="text-base">🛡️</span>
-                            <span id="workoutBannerTitle" class="text-xs font-black text-white truncate">Antagonist Armor</span>
+                            <span id="workoutBannerIcon" class="text-base">🏋️</span>
+                            <span id="workoutBannerTitle" class="text-xs font-black text-white truncate">Bench Press</span>
                         </div>
-                        <button onclick="openWorkoutPresetPicker()" class="text-[10px] font-bold text-emerald-400 hover:underline shrink-0">Switch Workout</button>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <select id="workoutPresetDropdown" onchange="selectWorkoutPreset(this.value)" class="bg-neutral-950 border border-neutral-700 text-white rounded-xl px-2.5 py-1 text-[11px] font-bold focus:outline-none focus:border-emerald-500">
+                                <option value="bench_press">🏋️ Bench Press</option>
+                                <option value="antagonist_armor">🛡️ Antagonist Armor</option>
+                                <option value="repeaters_7_3">⚡ 7:3 Repeaters</option>
+                                <option value="max_hangs">🧗 Max Hangs</option>
+                                <option value="climber_core">💪 Climber Core</option>
+                                <option value="mobility_flow">🧘 Mobility Flow</option>
+                            </select>
+                        </div>
                     </div>
                 </div></section>
 
@@ -569,20 +634,46 @@
 
                 <!-- SUB-VIEW 1: SESSIONS VIEW (Primary, Front and Center) -->
                 <div id="historyViewSessions" class="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5 pt-3">
-                    <!-- Hero Summary Banner -->
-                    <div id="historyHeroBanner" class="bg-gradient-to-r from-neutral-900 via-neutral-900/90 to-neutral-950 border border-neutral-800 rounded-2xl p-3.5 mb-3 flex items-center justify-between shadow-sm">
-                        <div class="flex items-center gap-3 min-w-0">
-                            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-lg shrink-0">🧗</div>
-                            <div class="min-w-0">
-                                <p id="historyHeroTitle" class="text-xs font-black text-white truncate">Session Activity</p>
-                                <p id="historyHeroSubtitle" class="text-[10px] text-neutral-400 truncate">Total volume & progress</p>
+                    <!-- Hero Summary Banner with High Density Stats -->
+                    <div id="historyHeroBanner" class="bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 border border-neutral-800 rounded-2xl p-3.5 mb-3 flex flex-col gap-3 shadow-sm">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-base shrink-0">🧗</div>
+                                <div class="min-w-0">
+                                    <p id="historyHeroTitle" class="text-xs font-black text-white truncate">Session Activity</p>
+                                    <p id="historyHeroSubtitle" class="text-[10px] text-neutral-400 truncate">Total volume & progress</p>
+                                </div>
+                            </div>
+                            <!-- Type Filter Pill -->
+                            <div class="flex bg-neutral-950 rounded-lg p-0.5 border border-neutral-800 text-[9px] font-black shrink-0">
+                                <button onclick="filterHistoryType('all')" id="hfTypeAll" class="px-2 py-1 rounded bg-emerald-500 text-black">ALL</button>
+                                <button onclick="filterHistoryType('climbs')" id="hfTypeClimbs" class="px-2 py-1 rounded text-neutral-400 hover:text-white">CLIMBS</button>
+                                <button onclick="filterHistoryType('workouts')" id="hfTypeWorkouts" class="px-2 py-1 rounded text-neutral-400 hover:text-white">WORKOUTS</button>
                             </div>
                         </div>
-                        <!-- Type Filter Pill -->
-                        <div class="flex bg-neutral-950 rounded-lg p-0.5 border border-neutral-800 text-[9px] font-black shrink-0 ml-2">
-                            <button onclick="filterHistoryType('all')" id="hfTypeAll" class="px-2 py-1 rounded bg-emerald-500 text-black">ALL</button>
-                            <button onclick="filterHistoryType('climbs')" id="hfTypeClimbs" class="px-2 py-1 rounded text-neutral-400 hover:text-white">CLIMBS</button>
-                            <button onclick="filterHistoryType('workouts')" id="hfTypeWorkouts" class="px-2 py-1 rounded text-neutral-400 hover:text-white">WORKOUTS</button>
+
+                        <!-- 5-Metric High-Density Strip: Flash %, Sends, Max Grade, Time, Sessions -->
+                        <div class="grid grid-cols-5 gap-1.5 pt-2.5 border-t border-neutral-800/80 text-center">
+                            <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
+                                <span id="heroStatFlash" class="text-xs sm:text-sm font-black text-amber-400 leading-tight">--%</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Flash %</span>
+                            </div>
+                            <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
+                                <span id="heroStatSends" class="text-xs sm:text-sm font-black text-emerald-400 leading-tight">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Sends</span>
+                            </div>
+                            <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
+                                <span id="heroStatMaxGrade" class="text-xs sm:text-sm font-black text-blue-400 leading-tight">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Max Send</span>
+                            </div>
+                            <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
+                                <span id="heroStatTime" class="text-xs sm:text-sm font-black text-cyan-400 leading-tight">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Time</span>
+                            </div>
+                            <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
+                                <span id="heroStatSessions" class="text-xs sm:text-sm font-black text-neutral-200 leading-tight">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Sessions</span>
+                            </div>
                         </div>
                     </div>
 
@@ -619,7 +710,7 @@
 
                     <!-- Progression Chart Card -->
                     <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-4 shadow-sm">
-                        <div class="flex justify-between items-center mb-3">
+                        <div class="flex justify-between items-center mb-2.5">
                             <!-- Chart Type Tabs -->
                             <div class="flex items-center bg-neutral-950 rounded-xl p-1 border border-neutral-800">
                                 <button onclick="setChartType('bar')" id="chartBtnBar" class="text-[9px] font-black px-2.5 py-1 rounded transition-colors text-neutral-400 hover:text-white uppercase">📊 Pyramid</button>
@@ -627,19 +718,20 @@
                                 <button onclick="setChartType('radar')" id="chartBtnRadar" class="text-[9px] font-black px-2.5 py-1 rounded transition-colors text-neutral-400 hover:text-white uppercase">🕸️ Style</button>
                             </div>
 
-                            <!-- Metric Selector for Trend -->
+                            <!-- Metric Selector for Trend Overlay -->
                             <div id="chartSelectorsContainer" class="flex items-center gap-1.5">
                                 <div class="relative inline-block" id="secondarySelectorWrapper">
                                     <button onclick="toggleChartDropdown('secondary')" id="secondarySelBtn" class="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-lg bg-neutral-950 border border-purple-500/40 text-purple-400 active:scale-95 transition-all">
                                         <span id="secondarySelText">Compare: None</span>
                                         <span class="text-[6px] opacity-75">▼</span>
                                     </button>
-                                    <div id="secondarySelDropdown" class="hidden absolute right-0 top-full mt-1.5 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1 min-w-[100px] z-50 text-[9px] font-black uppercase tracking-wider divide-y divide-neutral-800/40">
+                                    <div id="secondarySelDropdown" class="hidden absolute right-0 top-full mt-1.5 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1 min-w-[110px] z-50 text-[9px] font-black uppercase tracking-wider divide-y divide-neutral-800/40">
                                         <button onclick="selectChartMetric('secondary', 'none')" class="w-full text-left px-3 py-2 text-neutral-500 hover:bg-neutral-800/60 transition-colors">None</button>
-                                        <button onclick="selectChartMetric('secondary', 'score')" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-neutral-800/60 transition-colors">Score</button>
-                                        <button onclick="selectChartMetric('secondary', 'sends')" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-neutral-800/60 transition-colors">Sends</button>
+                                        <button onclick="selectChartMetric('secondary', 'max_grade')" class="w-full text-left px-3 py-2 text-blue-400 hover:bg-neutral-800/60 transition-colors">Max Grade</button>
                                         <button onclick="selectChartMetric('secondary', 'avg_grade')" class="w-full text-left px-3 py-2 text-purple-400 hover:bg-neutral-800/60 transition-colors">Avg Grade</button>
                                         <button onclick="selectChartMetric('secondary', 'flash_pct')" class="w-full text-left px-3 py-2 text-amber-400 hover:bg-neutral-800/60 transition-colors">Flash %</button>
+                                        <button onclick="selectChartMetric('secondary', 'score')" class="w-full text-left px-3 py-2 text-emerald-400 hover:bg-neutral-800/60 transition-colors">Score</button>
+                                        <button onclick="selectChartMetric('secondary', 'sends')" class="w-full text-left px-3 py-2 text-cyan-400 hover:bg-neutral-800/60 transition-colors">Sends</button>
                                         <button onclick="selectChartMetric('secondary', 'projects')" class="w-full text-left px-3 py-2 text-orange-400 hover:bg-neutral-800/60 transition-colors">Proj Tries</button>
                                         <button onclick="selectChartMetric('secondary', 'duration')" class="w-full text-left px-3 py-2 text-blue-400 hover:bg-neutral-800/60 transition-colors">Duration</button>
                                     </div>
@@ -647,9 +739,78 @@
                             </div>
                         </div>
 
+                        <!-- 1-Tap Primary Metric Selector Chips Bar -->
+                        <div id="chartMetricChipsRow" class="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-neutral-800/80">
+                            <div id="chartMetricChipsContainer" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                                <button onclick="setTrendMetric('max_grade')" id="chipMetric_max_grade" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-blue-500 text-black shadow-sm">🧗 Max Grade</button>
+                                <button onclick="setTrendMetric('avg_grade')" id="chipMetric_avg_grade" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">📊 Avg Grade</button>
+                                <button onclick="setTrendMetric('flash_pct')" id="chipMetric_flash_pct" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">⚡ Flash %</button>
+                                <button onclick="setTrendMetric('score')" id="chipMetric_score" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">🏆 Score</button>
+                                <button onclick="setTrendMetric('sends')" id="chipMetric_sends" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">✓ Sends</button>
+                                <button onclick="setTrendMetric('projects')" id="chipMetric_projects" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">🎯 Proj Tries</button>
+                                <button onclick="setTrendMetric('duration')" id="chipMetric_duration" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">⏱️ Duration</button>
+                            </div>
+                            <button id="chartSmoothToggle" onclick="toggleTrendSmoothing()" title="Toggle 3-Session Moving Average" class="px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-white">
+                                <span>〰️ Smooth</span>
+                            </button>
+                        </div>
+
                         <!-- Canvas -->
                         <div class="w-full h-64 cursor-pointer">
                             <canvas id="progressionChart" class="w-full h-full"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Strength & Exercise Progression Card -->
+                    <div id="strengthProgressionCard" class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-4 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xl">🏋️</span>
+                                <div>
+                                    <h3 class="text-xs font-black text-white uppercase tracking-wider">Strength Progression</h3>
+                                    <p class="text-[10px] text-neutral-400">Weight & 1RM Over Time</p>
+                                </div>
+                            </div>
+                            <!-- Exercise Selector -->
+                            <select id="strengthExerciseSelect" onchange="renderStrengthProgression(this.value)" class="bg-neutral-950 border border-neutral-700 text-white rounded-xl px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-emerald-500">
+                                <option value="bench_press_barbell">Barbell Bench Press</option>
+                                <option value="incline_db_press">Incline DB Press</option>
+                                <option value="overhead_press">Overhead Press</option>
+                                <option value="dips">Dips / Weighted Dips</option>
+                            </select>
+                        </div>
+
+                        <!-- 4-Stat Strength Metric PR Grid -->
+                        <div class="grid grid-cols-4 gap-2">
+                            <div class="bg-neutral-950 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center">
+                                <span id="strMaxWeight" class="text-white text-sm sm:text-base font-black">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Best Wt</span>
+                            </div>
+                            <div class="bg-neutral-950 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center">
+                                <span id="strEst1RM" class="text-emerald-400 text-sm sm:text-base font-black">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Est 1RM</span>
+                            </div>
+                            <div class="bg-neutral-950 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center">
+                                <span id="strMaxVolume" class="text-purple-400 text-sm sm:text-base font-black">--</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Max Vol</span>
+                            </div>
+                            <div class="bg-neutral-950 border border-neutral-800 rounded-xl p-2 flex flex-col items-center justify-center text-center">
+                                <span id="strTotalSessions" class="text-cyan-400 text-sm sm:text-base font-black">0</span>
+                                <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Sessions</span>
+                            </div>
+                        </div>
+
+                        <!-- Strength Progression Line Chart -->
+                        <div class="w-full h-44 cursor-pointer pt-1">
+                            <canvas id="strengthProgressionChart" class="w-full h-full"></canvas>
+                        </div>
+
+                        <!-- Recent Sets History Breakdown -->
+                        <div class="pt-2 border-t border-neutral-800">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Past Logged Sets</p>
+                            <div id="strengthSessionHistoryList" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                <p class="text-neutral-500 text-center py-3 text-xs">No strength workouts logged yet.</p>
+                            </div>
                         </div>
                     </div>
 
@@ -824,6 +985,60 @@
 
         </div>
 
+    <!-- EXERCISE PROGRESS MODAL OVERLAY -->
+    <div id="exerciseProgressModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-[160] hidden items-end sm:items-center justify-center pointer-events-auto p-0 sm:p-4" onclick="if(event.target===this) closeExerciseProgressModal()">
+        <div class="bg-neutral-950 border border-neutral-800 rounded-t-[2.5rem] sm:rounded-[2rem] w-full max-w-md max-h-[88dvh] flex flex-col shadow-2xl overflow-hidden">
+            <!-- Header -->
+            <div class="p-5 pb-3 border-b border-neutral-800 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg shrink-0">🏋️</div>
+                    <div class="min-w-0">
+                        <h3 id="modalExTitle" class="text-base font-black text-white leading-tight truncate">Barbell Bench Press</h3>
+                        <p class="text-[10px] text-neutral-400 font-bold">Progression & PR Records</p>
+                    </div>
+                </div>
+                <button onclick="closeExerciseProgressModal()" class="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition shrink-0 ml-2">
+                    ✕
+                </button>
+            </div>
+            <!-- Body -->
+            <div class="p-5 overflow-y-auto space-y-4">
+                <!-- PR Summary 3-Grid -->
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-2.5">
+                        <span id="modalPRWeight" class="text-sm sm:text-base font-black text-white">--</span>
+                        <span class="text-[8px] uppercase font-black tracking-wider text-neutral-500 block mt-0.5">Best Weight</span>
+                    </div>
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-2.5">
+                        <span id="modalPR1RM" class="text-sm sm:text-base font-black text-emerald-400">--</span>
+                        <span class="text-[8px] uppercase font-black tracking-wider text-neutral-500 block mt-0.5">Est. 1RM</span>
+                    </div>
+                    <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-2.5">
+                        <span id="modalTotalSessions" class="text-sm sm:text-base font-black text-cyan-400">0</span>
+                        <span class="text-[8px] uppercase font-black tracking-wider text-neutral-500 block mt-0.5">Sessions</span>
+                    </div>
+                </div>
+
+                <!-- Mini Progression Chart Canvas -->
+                <div class="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-neutral-400">Weight & 1RM Over Time</span>
+                    </div>
+                    <div class="w-full h-36">
+                        <canvas id="modalExerciseChart" class="w-full h-full"></canvas>
+                    </div>
+                </div>
+
+                <!-- Session History Table -->
+                <div>
+                    <h4 class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-2">Logged Sets & Dates</h4>
+                    <div id="modalExHistoryList" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1">
+                        <p class="text-neutral-500 text-center py-4 text-xs">No logged sessions yet for this exercise.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- TRAINING MODE CONFIG MODAL -->
     <div id="trainingConfigOverlay" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm hidden items-end justify-center" onclick="closeTrainingConfig(event)">

@@ -46,7 +46,25 @@ const Planner = (function () {
         { id: 'bird_dog', name: 'Bird-Dog (3s Hold)', sets: 3, reps: '10 reps / side', restSeconds: 45, desc: 'Posterior chain, glute, and rotational stabilization.' }
     ];
 
+    const EXERCISES_BENCH_PRESS = [
+        { id: 'bench_press_barbell', name: 'Barbell Bench Press', sets: 4, reps: '6 reps', restSeconds: 180, desc: 'Full range of motion, touch chest with control, drive upward with active scapular retraction.', trackWeight: true, defaultWeight: 60, defaultReps: 6 },
+        { id: 'incline_db_press', name: 'Incline Dumbbell Press', sets: 3, reps: '10 reps', restSeconds: 90, desc: 'Upper chest and anterior deltoid strength for compression moves on steep walls.', trackWeight: true, defaultWeight: 20, defaultReps: 10 },
+        { id: 'overhead_press', name: 'Overhead Press (OHP)', sets: 3, reps: '8 reps', restSeconds: 90, desc: 'Vertical push strength, shoulder stability, and thoracic extension.', trackWeight: true, defaultWeight: 40, defaultReps: 8 },
+        { id: 'dips', name: 'Chest / Tricep Dips', sets: 3, reps: '10 reps', restSeconds: 90, desc: 'Lockout tricep power for mantels, topouts, and deep compression.', trackWeight: true, defaultWeight: 0, defaultReps: 10 }
+    ];
+
     const WORKOUT_PRESETS = [
+        {
+            id: 'bench_press',
+            name: 'Bench Press & Antagonist Power',
+            shortName: 'Bench Press',
+            category: 'strength',
+            icon: '🏋️',
+            badge: 'Strength',
+            durationMinutes: 25,
+            desc: 'Heavy push strength to balance climbing pull muscles, stabilize shoulders, and build chest/tricep compression power.',
+            exercises: EXERCISES_BENCH_PRESS
+        },
         {
             id: 'antagonist_armor',
             name: 'Antagonist Armor (Joint & Tendon Prehab)',

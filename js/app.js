@@ -967,6 +967,13 @@
             if (existing) {
                 activeWorkoutPreset = existing;
             } else {
+                // Clean up any previous unstarted workout (0 completed sets) so orphaned empty presets do not linger
+                if (activeWorkoutPreset && activeWorkoutPreset.id !== preset.id) {
+                    const hasCompleted = (activeWorkoutPreset.exercises || []).some(e => (e.completedSets || 0) > 0);
+                    if (!hasCompleted) {
+                        sessionWorkouts = sessionWorkouts.filter(w => w.id !== activeWorkoutPreset.id);
+                    }
+                }
                 activeWorkoutPreset = {
                     id: preset.id,
                     name: preset.name,
@@ -983,7 +990,13 @@
                         reps: ex.reps || '10 reps',
                         restSeconds: ex.restSeconds || 60,
                         desc: ex.desc || '',
-                        completedSets: ex.completedSets || 0
+                        trackWeight: !!ex.trackWeight,
+                        defaultWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : 60,
+                        defaultReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
+                        activeWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : 60,
+                        activeReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
+                        completedSets: ex.completedSets || 0,
+                        setsData: ex.setsData ? [...ex.setsData] : []
                     }))
                 };
                 sessionWorkouts.push(activeWorkoutPreset);
@@ -991,7 +1004,8 @@
             activeWorkoutExIndex = 0;
         }
 
-        function startPresetWorkout(presetId) {
+        function selectWorkoutPreset(presetId) {
+            if (!presetId) return;
             if (!sessionStartTime) {
                 startSession();
             }
@@ -1001,11 +1015,155 @@
             }
             if (!preset && typeof Planner !== 'undefined' && typeof Planner.getWorkoutPresets === 'function') {
                 const list = Planner.getWorkoutPresets();
-                if (list && list.length > 0) preset = list[0];
+                preset = list.find(p => p.id === presetId) || list[0];
             }
             if (preset) {
                 initWorkoutPreset(preset);
             }
+
+            // Sync quick-chips active styles
+            const chips = ['bench_press', 'antagonist_armor', 'repeaters_7_3', 'max_hangs', 'climber_core', 'mobility_flow'];
+            chips.forEach(cid => {
+                const el = document.getElementById('quickChip_' + cid);
+                if (el) {
+                    if (cid === presetId) {
+                        el.className = 'px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm';
+                    } else {
+                        el.className = 'px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white';
+                    }
+                }
+            });
+
+            // Sync banner dropdown
+            const dd = document.getElementById('workoutPresetDropdown');
+            if (dd && dd.value !== presetId) {
+                dd.value = presetId;
+            }
+
+            renderWorkoutHUD();
+            saveActiveSession();
+            if ('vibrate' in navigator) navigator.vibrate(15);
+        }
+        window.selectWorkoutPreset = selectWorkoutPreset;
+
+        function adjWorkoutWeight(delta) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            let cur = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 60);
+            cur = Math.max(0, Math.round((cur + delta) * 10) / 10);
+            currentEx.activeWeight = cur;
+
+            const input = document.getElementById('workoutInputWeight');
+            if (input) input.value = cur;
+
+            renderWorkoutHUD();
+            saveActiveSession();
+        }
+        window.adjWorkoutWeight = adjWorkoutWeight;
+
+        function setWorkoutWeight(val) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            let cur = Math.max(0, parseFloat(val) || 0);
+            currentEx.activeWeight = cur;
+            renderWorkoutHUD();
+            saveActiveSession();
+        }
+        window.setWorkoutWeight = setWorkoutWeight;
+
+        function adjWorkoutReps(delta) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            let cur = typeof currentEx.activeReps === 'number' ? currentEx.activeReps : (currentEx.defaultReps || 6);
+            cur = Math.max(1, cur + delta);
+            currentEx.activeReps = cur;
+
+            const input = document.getElementById('workoutInputReps');
+            if (input) input.value = cur;
+
+            renderWorkoutHUD();
+            saveActiveSession();
+        }
+        window.adjWorkoutReps = adjWorkoutReps;
+
+        function setWorkoutReps(val) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            let cur = Math.max(1, parseInt(val, 10) || 1);
+            currentEx.activeReps = cur;
+            renderWorkoutHUD();
+            saveActiveSession();
+        }
+        window.setWorkoutReps = setWorkoutReps;
+
+        function getExercisePR(exerciseId) {
+            let maxWeight = 0;
+            let repsAtMax = 0;
+            let max1RM = 0;
+            let totalSessions = 0;
+
+            const scanSets = (sets) => {
+                (sets || []).forEach(st => {
+                    if (st && st.completed && typeof st.weight === 'number' && st.weight > 0) {
+                        const w = st.weight;
+                        const r = st.reps || 1;
+                        const est1RM = Math.round(w * (1 + r / 30));
+                        if (w > maxWeight) {
+                            maxWeight = w;
+                            repsAtMax = r;
+                        }
+                        if (est1RM > max1RM) {
+                            max1RM = est1RM;
+                        }
+                    }
+                });
+            };
+
+            // Scan history
+            (boulderHistory || []).forEach(s => {
+                let hasEx = false;
+                (s.workouts || []).forEach(w => {
+                    (w.exercises || []).forEach(ex => {
+                        if (ex.id === exerciseId && ex.setsData && ex.setsData.length > 0) {
+                            scanSets(ex.setsData);
+                            hasEx = true;
+                        }
+                    });
+                });
+                if (hasEx) totalSessions++;
+            });
+
+            // Scan active session
+            (sessionWorkouts || []).forEach(w => {
+                (w.exercises || []).forEach(ex => {
+                    if (ex.id === exerciseId && ex.setsData && ex.setsData.length > 0) {
+                        scanSets(ex.setsData);
+                    }
+                });
+            });
+
+            return {
+                weight: maxWeight,
+                reps: repsAtMax,
+                est1RM: max1RM,
+                sessions: totalSessions
+            };
+        }
+        window.getExercisePR = getExercisePR;
+
+        function startPresetWorkout(presetId) {
+            if (!sessionStartTime) {
+                startSession();
+            }
+            selectWorkoutPreset(presetId);
             switchLogMode('workout');
             switchTab('log');
             if ('vibrate' in navigator) navigator.vibrate([20, 40, 20]);
@@ -1027,6 +1185,23 @@
             if (bannerIcon) bannerIcon.innerText = activeWorkoutPreset.icon || '💪';
             if (bannerTitle) bannerTitle.innerText = activeWorkoutPreset.shortName || activeWorkoutPreset.name;
 
+            // Sync quick-chips and dropdown
+            const chips = ['bench_press', 'antagonist_armor', 'repeaters_7_3', 'max_hangs', 'climber_core', 'mobility_flow'];
+            chips.forEach(cid => {
+                const el = document.getElementById('quickChip_' + cid);
+                if (el) {
+                    if (cid === activeWorkoutPreset.id) {
+                        el.className = 'px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm';
+                    } else {
+                        el.className = 'px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white';
+                    }
+                }
+            });
+            const dd = document.getElementById('workoutPresetDropdown');
+            if (dd && dd.value !== activeWorkoutPreset.id) {
+                dd.value = activeWorkoutPreset.id;
+            }
+
             // Update Exercise Card
             const catBadge = document.getElementById('workoutExCategoryBadge');
             const exProgress = document.getElementById('workoutExProgress');
@@ -1041,6 +1216,36 @@
             if (exTarget) exTarget.innerText = `${currentEx.sets} sets × ${currentEx.reps}`;
             if (exDesc) exDesc.innerText = currentEx.desc || '';
             if (restBtnLabel) restBtnLabel.innerText = `Rest ${currentEx.restSeconds || 60}s`;
+
+            // Weight & Reps Stepper Handling
+            const weightRepsContainer = document.getElementById('workoutWeightRepsContainer');
+            if (weightRepsContainer) {
+                if (currentEx.trackWeight) {
+                    weightRepsContainer.classList.remove('hidden');
+                    weightRepsContainer.classList.add('flex');
+
+                    const activeW = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 60);
+                    const activeR = typeof currentEx.activeReps === 'number' ? currentEx.activeReps : (currentEx.defaultReps || 6);
+
+                    const inputW = document.getElementById('workoutInputWeight');
+                    const inputR = document.getElementById('workoutInputReps');
+                    if (inputW && inputW !== document.activeElement) inputW.value = activeW;
+                    if (inputR && inputR !== document.activeElement) inputR.value = activeR;
+
+                    const prBadge = document.getElementById('workoutExPRBadge');
+                    if (prBadge) {
+                        const pr = getExercisePR(currentEx.id);
+                        if (pr.weight > 0) {
+                            prBadge.innerText = `🏆 PR: ${pr.weight} kg × ${pr.reps} (1RM: ${pr.est1RM} kg)`;
+                        } else {
+                            prBadge.innerText = `🏆 PR: No logs yet`;
+                        }
+                    }
+                } else {
+                    weightRepsContainer.classList.add('hidden');
+                    weightRepsContainer.classList.remove('flex');
+                }
+            }
 
             // Navigation Buttons
             const btnPrev = document.getElementById('btnPrevExercise');
@@ -1059,9 +1264,23 @@
             if (setsGrid) {
                 const totalSets = currentEx.sets || 3;
                 const completedSets = currentEx.completedSets || 0;
+                const setsData = currentEx.setsData || [];
+                const activeW = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 60);
+                const activeR = typeof currentEx.activeReps === 'number' ? currentEx.activeReps : (currentEx.defaultReps || 6);
+
                 let setsHtml = '';
                 for (let s = 0; s < totalSets; s++) {
                     const isDone = s < completedSets;
+                    const setData = setsData[s];
+                    let setLabel = `Set ${s + 1}`;
+                    if (currentEx.trackWeight) {
+                        if (isDone && setData) {
+                            setLabel = `Set ${s + 1}: ${setData.weight}kg × ${setData.reps}`;
+                        } else {
+                            setLabel = `Set ${s + 1} (${activeW}kg × ${activeR})`;
+                        }
+                    }
+
                     setsHtml += `
                         <button onclick="toggleWorkoutSet(${s})" class="py-2.5 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 border ${
                             isDone
@@ -1069,7 +1288,7 @@
                                 : 'bg-neutral-800/80 border-neutral-700/80 text-neutral-300 hover:border-neutral-500'
                         }">
                             <span>${isDone ? '✓' : '○'}</span>
-                            <span>Set ${s + 1}</span>
+                            <span class="truncate">${setLabel}</span>
                         </button>
                     `;
                 }
@@ -1083,9 +1302,19 @@
             const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
             if (!currentEx) return;
 
+            currentEx.setsData = currentEx.setsData || [];
             const currentCompleted = currentEx.completedSets || 0;
+            const activeW = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 60);
+            const activeR = typeof currentEx.activeReps === 'number' ? currentEx.activeReps : (currentEx.defaultReps || 6);
+
             if (setIdx === currentCompleted) {
                 // Completing next set
+                currentEx.setsData[setIdx] = {
+                    set: setIdx + 1,
+                    weight: currentEx.trackWeight ? activeW : 0,
+                    reps: currentEx.trackWeight ? activeR : (parseInt(currentEx.reps) || 10),
+                    completed: true
+                };
                 currentEx.completedSets = currentCompleted + 1;
                 if ('vibrate' in navigator) navigator.vibrate([15, 30, 15]);
                 if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('work');
@@ -1098,9 +1327,18 @@
             } else if (setIdx < currentCompleted) {
                 // Tapping an already completed set: undo back to this set
                 currentEx.completedSets = setIdx;
+                currentEx.setsData = currentEx.setsData.slice(0, setIdx);
                 if ('vibrate' in navigator) navigator.vibrate(10);
             } else {
                 // Tapping set ahead: mark up to this set
+                for (let i = currentCompleted; i <= setIdx; i++) {
+                    currentEx.setsData[i] = {
+                        set: i + 1,
+                        weight: currentEx.trackWeight ? activeW : 0,
+                        reps: currentEx.trackWeight ? activeR : (parseInt(currentEx.reps) || 10),
+                        completed: true
+                    };
+                }
                 currentEx.completedSets = setIdx + 1;
                 if ('vibrate' in navigator) navigator.vibrate([15, 30, 15]);
                 const restSecs = currentEx.restSeconds || 60;
@@ -1152,11 +1390,13 @@
         window.triggerWorkoutRest = triggerWorkoutRest;
 
         function openWorkoutPresetPicker() {
-            switchTab('planner');
-            setTimeout(() => {
-                const el = document.getElementById('plannerWorkoutPresetsList');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
+            const dd = document.getElementById('workoutPresetDropdown');
+            if (dd) {
+                dd.focus();
+                try { dd.showPicker(); } catch (e) {}
+            } else {
+                switchTab('planner');
+            }
         }
         window.openWorkoutPresetPicker = openWorkoutPresetPicker;
 

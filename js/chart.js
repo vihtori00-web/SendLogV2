@@ -14,63 +14,99 @@
 
         let chart = null;
         let currentChartType = 'line';
-        let activeTrendMetric = 'score';
-        let activeTrendSecondary = 'avg_grade';
+        let activeTrendMetric = 'max_grade';
+        let activeTrendSecondary = 'none';
+        let isTrendSmoothed = false;
+
+        function computeMovingAverage(data, windowSize = 3) {
+            const result = [];
+            for (let i = 0; i < data.length; i++) {
+                const window = [];
+                for (let j = Math.max(0, i - windowSize + 1); j <= i; j++) {
+                    if (data[j] !== null && data[j] !== undefined) {
+                        window.push(data[j]);
+                    }
+                }
+                if (window.length > 0) {
+                    const sum = window.reduce((a, b) => a + b, 0);
+                    result.push(Math.round((sum / window.length) * 10) / 10);
+                } else {
+                    result.push(data[i]);
+                }
+            }
+            return result;
+        }
 
         function getMetricConfig(metric, filteredHistory) {
             const configs = {
+                max_grade: {
+                    labelText: 'Max Grade',
+                    color: '#38bdf8',
+                    bgColor: 'rgba(56, 189, 248, 0.08)',
+                    yAxisID: 'y',
+                    data: filteredHistory.map(s => {
+                        let maxG = -1;
+                        (s.climbs || []).forEach(c => {
+                            if (c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash) {
+                                const idx = fontGrades.indexOf(c.gradeStr);
+                                if (idx > maxG) maxG = idx;
+                            }
+                        });
+                        return maxG >= 0 ? maxG : null;
+                    })
+                },
+                avg_grade: {
+                    labelText: 'Avg Grade',
+                    color: '#a855f7',
+                    bgColor: 'rgba(168, 85, 247, 0.08)',
+                    yAxisID: 'y1',
+                    data: filteredHistory.map(s => {
+                        let sSum = 0, sCount = 0;
+                        (s.climbs || []).forEach(c => {
+                            if (c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash) {
+                                sSum += fontGrades.indexOf(c.gradeStr);
+                                sCount++;
+                            }
+                        });
+                        return sCount > 0 ? (Math.round((sSum / sCount) * 10) / 10) : null;
+                    })
+                },
                 score: {
                     labelText: 'Score',
                     color: '#10b981',
-                    bgColor: 'rgba(16, 185, 129, 0.07)',
+                    bgColor: 'rgba(16, 185, 129, 0.08)',
                     yAxisID: 'y',
                     data: filteredHistory.map(s => s.score || 0)
                 },
                 sends: {
                     labelText: 'Sends',
-                    color: '#10b981',
-                    bgColor: 'rgba(16, 185, 129, 0.07)',
+                    color: '#06b6d4',
+                    bgColor: 'rgba(6, 182, 212, 0.08)',
                     yAxisID: 'y',
-                    data: filteredHistory.map(s => (s.climbs || []).filter(c => c.statusText === 'Top' || c.statusText === 'Flash').length)
-                },
-                avg_grade: {
-                    labelText: 'Avg Grade',
-                    color: '#a855f7',
-                    bgColor: 'rgba(168, 85, 247, 0.07)',
-                    yAxisID: 'y1',
-                    data: filteredHistory.map(s => {
-                        let sSum = 0, sCount = 0;
-                        (s.climbs || []).forEach(c => {
-                            if (c.statusText === 'Top' || c.statusText === 'Flash') {
-                                sSum += fontGrades.indexOf(c.gradeStr);
-                                sCount++;
-                            }
-                        });
-                        return sCount > 0 ? (sSum / sCount) : 0;
-                    })
+                    data: filteredHistory.map(s => (s.climbs || []).filter(c => c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash).length)
                 },
                 flash_pct: {
                     labelText: 'Flash %',
                     color: '#f59e0b',
-                    bgColor: 'rgba(245, 158, 11, 0.07)',
+                    bgColor: 'rgba(245, 158, 11, 0.08)',
                     yAxisID: 'y',
                     data: filteredHistory.map(s => {
                         const total = (s.climbs || []).length;
-                        const flashes = (s.climbs || []).filter(c => c.statusText === 'Flash').length;
+                        const flashes = (s.climbs || []).filter(c => c.statusText === 'Flash' || c.isFlash).length;
                         return total > 0 ? Math.round((flashes / total) * 100) : 0;
                     })
                 },
                 projects: {
                     labelText: 'Proj Tries',
                     color: '#f97316',
-                    bgColor: 'rgba(249, 115, 22, 0.07)',
+                    bgColor: 'rgba(249, 115, 22, 0.08)',
                     yAxisID: 'y',
                     data: filteredHistory.map(s => (s.climbs || []).filter(c => c.statusText === 'Project').reduce((sum, c) => sum + (c.tries || 0), 0))
                 },
                 duration: {
                     labelText: 'Duration',
-                    color: '#3b82f6',
-                    bgColor: 'rgba(59, 130, 246, 0.07)',
+                    color: '#6366f1',
+                    bgColor: 'rgba(99, 102, 241, 0.08)',
                     yAxisID: 'y',
                     data: filteredHistory.map(s => Math.round((s.duration || 0) / 60))
                 }
@@ -85,11 +121,54 @@
             }
         }
 
+        function setTrendMetric(metric) {
+            if (currentChartType !== 'line') {
+                setChartType('line');
+            }
+            activeTrendMetric = metric;
+            if (activeTrendSecondary === metric) {
+                activeTrendSecondary = 'none';
+            }
+            updateMetricChipsUI();
+            updateSelectorButtonsUI();
+            updateAnalytics();
+        }
+        window.setTrendMetric = setTrendMetric;
+
+        function toggleTrendSmoothing() {
+            isTrendSmoothed = !isTrendSmoothed;
+            const btn = document.getElementById('chartSmoothToggle');
+            if (btn) {
+                if (isTrendSmoothed) {
+                    btn.className = 'px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 bg-emerald-500 text-black shadow-sm';
+                } else {
+                    btn.className = 'px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-white';
+                }
+            }
+            updateAnalytics();
+        }
+        window.toggleTrendSmoothing = toggleTrendSmoothing;
+
+        function updateMetricChipsUI() {
+            const metrics = ['max_grade', 'avg_grade', 'flash_pct', 'score', 'sends', 'projects', 'duration'];
+            metrics.forEach(m => {
+                const chip = document.getElementById('chipMetric_' + m);
+                if (chip) {
+                    if (m === activeTrendMetric) {
+                        chip.className = 'px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-blue-500 text-black shadow-sm';
+                    } else {
+                        chip.className = 'px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800';
+                    }
+                }
+            });
+        }
+
         function selectChartMetric(type, metric) {
             if (type === 'secondary') {
                 activeTrendSecondary = metric;
                 if (activeTrendSecondary === activeTrendMetric && activeTrendSecondary !== 'none') {
                     activeTrendMetric = activeTrendSecondary === 'avg_grade' ? 'score' : 'avg_grade';
+                    updateMetricChipsUI();
                 }
             }
             
@@ -101,16 +180,15 @@
         }
 
         function updateSelectorButtonsUI() {
-
             const sBtn = document.getElementById('secondarySelBtn');
             const sText = document.getElementById('secondarySelText');
             if (sBtn && sText) {
                 const names = {
-                    score: 'Score', sends: 'Sends', avg_grade: 'Avg Grade',
+                    max_grade: 'Max Grade', score: 'Score', sends: 'Sends', avg_grade: 'Avg Grade',
                     flash_pct: 'Flash %', projects: 'Proj Tries', duration: 'Duration',
                     none: 'None'
                 };
-                sText.innerText = names[activeTrendSecondary] || 'Avg Grade';
+                sText.innerText = 'Compare: ' + (names[activeTrendSecondary] || 'None');
                 
                 sBtn.classList.remove(
                     'border-emerald-500/40', 'text-emerald-400/80',
@@ -125,8 +203,9 @@
                     sBtn.classList.add('border-neutral-800', 'text-neutral-500');
                 } else {
                     const classes = {
+                        max_grade: ['border-blue-500/40', 'text-blue-400'],
                         score: ['border-emerald-500/40', 'text-emerald-400/80'],
-                        sends: ['border-emerald-500/40', 'text-emerald-400/80'],
+                        sends: ['border-cyan-500/40', 'text-cyan-400/80'],
                         avg_grade: ['border-purple-500/40', 'text-purple-400/80'],
                         flash_pct: ['border-amber-500/40', 'text-amber-400/80'],
                         projects: ['border-orange-500/40', 'text-orange-400/80'],
@@ -296,49 +375,63 @@
                 const primaryConfig = getMetricConfig(activeTrendMetric, filteredHistory);
                 const secondaryConfig = activeTrendSecondary !== 'none' ? getMetricConfig(activeTrendSecondary, filteredHistory) : null;
 
+                let primaryData = primaryConfig.data;
+                if (isTrendSmoothed) {
+                    primaryData = computeMovingAverage(primaryData, 3);
+                }
+
                 const datasets = [
                     { 
-                        label: primaryConfig.labelText, 
-                        data: primaryConfig.data, 
+                        label: primaryConfig.labelText + (isTrendSmoothed ? ' (Smoothed)' : ''), 
+                        data: primaryData, 
                         borderColor: primaryConfig.color, 
                         backgroundColor: primaryConfig.bgColor, 
                         borderWidth: 2, 
                         fill: true, 
-                        tension: 0.4, 
+                        tension: 0.35, 
                         yAxisID: 'y', 
-                        pointRadius: 0, 
-                        hitRadius: 0, 
-                        hoverRadius: 0 
+                        spanGaps: true,
+                        pointRadius: 3, 
+                        pointHoverRadius: 6, 
+                        pointBackgroundColor: primaryConfig.color,
+                        hitRadius: 8
                     }
                 ];
 
                 if (secondaryConfig) {
-                    const secBorderColor = secondaryConfig.color + 'bb';
+                    const secBorderColor = secondaryConfig.color + 'cc';
+                    let secData = secondaryConfig.data;
+                    if (isTrendSmoothed) {
+                        secData = computeMovingAverage(secData, 3);
+                    }
                     datasets.push({ 
                         label: secondaryConfig.labelText, 
-                        data: secondaryConfig.data, 
+                        data: secData, 
                         borderColor: secBorderColor, 
                         backgroundColor: 'transparent', 
                         borderDash: [4, 4], 
                         borderWidth: 1.5, 
                         tension: 0.3, 
                         yAxisID: 'y1', 
-                        pointRadius: 0, 
-                        hitRadius: 0, 
-                        hoverRadius: 0 
+                        spanGaps: true,
+                        pointRadius: 2.5, 
+                        pointHoverRadius: 5, 
+                        pointBackgroundColor: secondaryConfig.color,
+                        hitRadius: 6
                     });
                 }
 
                 updateSelectorButtonsUI();
+                updateMetricChipsUI();
 
                 const hasY1 = secondaryConfig !== null;
 
                 if (chart) {
                     chart.data.labels = labels;
                     chart.data.datasets = datasets;
-                    chart.options.scales.y.beginAtZero = activeTrendMetric !== 'avg_grade';
+                    chart.options.scales.y.beginAtZero = activeTrendMetric !== 'avg_grade' && activeTrendMetric !== 'max_grade';
                     chart.options.scales.y1.display = hasY1;
-                    chart.options.scales.y1.beginAtZero = activeTrendSecondary !== 'avg_grade';
+                    chart.options.scales.y1.beginAtZero = activeTrendSecondary !== 'avg_grade' && activeTrendSecondary !== 'max_grade';
                     chart.update('none');
                 } else {
                     chart = new Chart(ctx, {
@@ -351,21 +444,72 @@
                             responsive: true, maintainAspectRatio: false,
                             plugins: {
                                 legend: { display: false },
-                                tooltip: { enabled: false },
+                                tooltip: { 
+                                    enabled: true,
+                                    backgroundColor: 'rgba(23, 23, 23, 0.95)',
+                                    titleColor: '#ffffff',
+                                    titleFont: { weight: 'bold', size: 11 },
+                                    bodyColor: '#d4d4d4',
+                                    bodyFont: { size: 10 },
+                                    borderColor: '#404040',
+                                    borderWidth: 1,
+                                    padding: 8,
+                                    displayColors: false,
+                                    callbacks: {
+                                        title: function (items) {
+                                            if (!items || items.length === 0) return '';
+                                            const idx = items[0].dataIndex;
+                                            const s = filteredHistory[idx];
+                                            return s ? (s.date || `Session ${idx + 1}`) : '';
+                                        },
+                                        label: function (item) {
+                                            const s = filteredHistory[item.dataIndex];
+                                            if (!s) return '';
+                                            const lines = [];
+                                            const val = item.raw;
+                                            if (val === null || val === undefined) return '';
+                                            if (item.datasetIndex === 0) {
+                                                if (activeTrendMetric === 'max_grade' || activeTrendMetric === 'avg_grade') {
+                                                    lines.push(`${primaryConfig.labelText}: ${fontGrades[Math.round(val)] || val}`);
+                                                } else if (activeTrendMetric === 'flash_pct') {
+                                                    lines.push(`${primaryConfig.labelText}: ${val}%`);
+                                                } else if (activeTrendMetric === 'score') {
+                                                    lines.push(`${primaryConfig.labelText}: ${val} pts`);
+                                                } else {
+                                                    lines.push(`${primaryConfig.labelText}: ${val}`);
+                                                }
+                                            } else if (secondaryConfig) {
+                                                if (activeTrendSecondary === 'max_grade' || activeTrendSecondary === 'avg_grade') {
+                                                    lines.push(`${secondaryConfig.labelText}: ${fontGrades[Math.round(val)] || val}`);
+                                                } else if (activeTrendSecondary === 'flash_pct') {
+                                                    lines.push(`${secondaryConfig.labelText}: ${val}%`);
+                                                } else {
+                                                    lines.push(`${secondaryConfig.labelText}: ${val}`);
+                                                }
+                                            }
+                                            const sends = (s.climbs || []).filter(c => c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash).length;
+                                            lines.push(`Sends: ${sends} · Score: ${s.score || 0}`);
+                                            return lines;
+                                        }
+                                    }
+                                },
                             },
                             interaction: { mode: 'index', intersect: false },
                             events: ['mousedown', 'mouseup', 'mousemove', 'touchstart', 'touchend', 'touchmove'],
                             scales: {
                                 y: { 
-                                    beginAtZero: activeTrendMetric !== 'avg_grade', 
+                                    beginAtZero: activeTrendMetric !== 'avg_grade' && activeTrendMetric !== 'max_grade', 
                                     position: 'left', 
                                     grid: { color: '#1a1a1a' }, 
                                     border: { display: false }, 
                                     ticks: { 
                                         font: { size: 9 },
                                         callback: function (val) {
-                                            if (activeTrendMetric === 'avg_grade') {
+                                            if (activeTrendMetric === 'avg_grade' || activeTrendMetric === 'max_grade') {
                                                 return fontGrades[Math.round(val)] || '';
+                                            }
+                                            if (activeTrendMetric === 'flash_pct') {
+                                                return val + '%';
                                             }
                                             return val;
                                         }
@@ -376,12 +520,15 @@
                                     position: 'right', 
                                     grid: { display: false }, 
                                     border: { display: false }, 
-                                    beginAtZero: activeTrendSecondary !== 'avg_grade',
+                                    beginAtZero: activeTrendSecondary !== 'avg_grade' && activeTrendSecondary !== 'max_grade',
                                     ticks: { 
                                         font: { size: 9 }, 
                                         callback: function (val) {
-                                            if (activeTrendSecondary === 'avg_grade') {
+                                            if (activeTrendSecondary === 'avg_grade' || activeTrendSecondary === 'max_grade') {
                                                 return fontGrades[Math.round(val)] || '';
+                                            }
+                                            if (activeTrendSecondary === 'flash_pct') {
+                                                return val + '%';
                                             }
                                             return val;
                                         } 
@@ -576,6 +723,8 @@
 
             // Compute period summary numbers
             let periodSends = 0;
+            let periodFlashes = 0;
+            let periodAllClimbs = 0;
             let periodDuration = 0;
             let bestGradeIdx = -1;
             let periodWorkouts = 0;
@@ -583,8 +732,10 @@
             filteredHistory.forEach(s => {
                 periodDuration += (s.duration || 0);
                 (s.climbs || []).forEach(c => {
+                    periodAllClimbs++;
                     if (c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash) {
                         periodSends++;
+                        if (c.statusText === 'Flash' || c.isFlash) periodFlashes++;
                         const gIdx = fontGrades.indexOf(c.gradeStr);
                         if (gIdx > bestGradeIdx) bestGradeIdx = gIdx;
                     }
@@ -592,7 +743,22 @@
                 periodWorkouts += (s.workouts || []).length;
             });
 
+            const flashPct = periodAllClimbs > 0 ? Math.round((periodFlashes / periodAllClimbs) * 100) : 0;
             const bestGradeStr = bestGradeIdx >= 0 ? fontGrades[bestGradeIdx] : '-';
+            const durStr = formatDuration(periodDuration) || '0m';
+
+            const heroFlash = document.getElementById('heroStatFlash');
+            const heroSends = document.getElementById('heroStatSends');
+            const heroMaxGrade = document.getElementById('heroStatMaxGrade');
+            const heroTime = document.getElementById('heroStatTime');
+            const heroSessions = document.getElementById('heroStatSessions');
+
+            if (heroFlash) heroFlash.innerText = `${flashPct}%`;
+            if (heroSends) heroSends.innerText = `${periodSends}`;
+            if (heroMaxGrade) heroMaxGrade.innerText = bestGradeStr;
+            if (heroTime) heroTime.innerText = durStr;
+            if (heroSessions) heroSessions.innerText = `${filteredHistory.length}`;
+
             const heroSummary = document.getElementById('historyPeriodSummary');
             const heroTitle = document.getElementById('historyHeroTitle');
             const heroSubtitle = document.getElementById('historyHeroSubtitle');
@@ -604,7 +770,6 @@
                 heroTitle.innerText = parts.join(' · ');
             }
             if (heroSubtitle) {
-                const durStr = formatDuration(periodDuration) || '0m';
                 heroSubtitle.innerText = `Max Send: ${bestGradeStr} · Total Active: ${durStr}`;
             }
 
@@ -789,12 +954,21 @@
                             </div>
                             ${w.exercises && w.exercises.length > 0 ? `
                                 <div class="space-y-1 pt-1 border-t border-cyan-500/15">
-                                    ${w.exercises.map(ex => `
-                                        <div class="flex items-center justify-between text-[10px] bg-neutral-900/70 px-2.5 py-1.5 rounded-lg border border-neutral-800">
-                                            <span class="text-neutral-200 font-bold">${ex.name}</span>
-                                            <span class="text-emerald-400 font-black flex items-center gap-1">✓ ${ex.completedSets !== undefined ? ex.completedSets : (ex.setsCompleted !== undefined ? ex.setsCompleted : (ex.sets || 3))} Sets</span>
-                                        </div>
-                                    `).join('')}
+                                    ${w.exercises.map(ex => {
+                                        let setsText = `✓ ${ex.completedSets !== undefined ? ex.completedSets : (ex.setsCompleted !== undefined ? ex.setsCompleted : (ex.sets || 3))} Sets`;
+                                        if (ex.setsData && ex.setsData.length > 0) {
+                                            const completedOnly = ex.setsData.filter(st => st && st.completed);
+                                            if (completedOnly.length > 0 && completedOnly.some(st => st.weight > 0)) {
+                                                setsText = completedOnly.map(st => `${st.weight}kg × ${st.reps}`).join(', ');
+                                            }
+                                        }
+                                        return `
+                                            <div class="flex items-center justify-between text-[10px] bg-neutral-900/70 px-2.5 py-1.5 rounded-lg border border-neutral-800">
+                                                <span class="text-neutral-200 font-bold">${ex.name}</span>
+                                                <span class="text-emerald-400 font-black flex items-center gap-1">${setsText}</span>
+                                            </div>
+                                        `;
+                                    }).join('')}
                                 </div>
                             ` : ''}
                         </li>
@@ -1623,3 +1797,319 @@
         }
 
         // ==========================================
+        // STRENGTH & EXERCISE PROGRESSION ENGINE
+        // ==========================================
+
+        let strengthChart = null;
+
+        function getExerciseHistory(exerciseId) {
+            const sessionsList = [];
+            let allTimeMaxWeight = 0;
+            let repsAtMaxWeight = 0;
+            let allTimeMax1RM = 0;
+            let allTimeMaxVolume = 0;
+
+            (boulderHistory || []).forEach(s => {
+                const matchedSets = [];
+                (s.workouts || []).forEach(w => {
+                    (w.exercises || []).forEach(ex => {
+                        if (ex.id === exerciseId) {
+                            if (ex.setsData && ex.setsData.length > 0) {
+                                ex.setsData.forEach(st => {
+                                    if (st && st.completed) {
+                                        matchedSets.push({
+                                            set: st.set,
+                                            weight: typeof st.weight === 'number' ? st.weight : 0,
+                                            reps: typeof st.reps === 'number' ? st.reps : (parseInt(ex.reps) || 6)
+                                        });
+                                    }
+                                });
+                            } else if (ex.completedSets > 0) {
+                                const defW = ex.defaultWeight || 0;
+                                const defR = parseInt(ex.reps) || 6;
+                                for (let i = 0; i < ex.completedSets; i++) {
+                                    matchedSets.push({ set: i + 1, weight: defW, reps: defR });
+                                }
+                            }
+                        }
+                    });
+                });
+
+                if (matchedSets.length > 0) {
+                    let sessMaxW = 0;
+                    let sessRepsAtMax = 0;
+                    let sessMax1RM = 0;
+                    let sessVol = 0;
+
+                    matchedSets.forEach(st => {
+                        const w = st.weight;
+                        const r = st.reps;
+                        const est = Math.round(w * (1 + r / 30));
+                        sessVol += (w * r);
+                        if (w > sessMaxW) {
+                            sessMaxW = w;
+                            sessRepsAtMax = r;
+                        }
+                        if (est > sessMax1RM) {
+                            sessMax1RM = est;
+                        }
+                    });
+
+                    if (sessMaxW > allTimeMaxWeight) {
+                        allTimeMaxWeight = sessMaxW;
+                        repsAtMaxWeight = sessRepsAtMax;
+                    }
+                    if (sessMax1RM > allTimeMax1RM) {
+                        allTimeMax1RM = sessMax1RM;
+                    }
+                    if (sessVol > allTimeMaxVolume) {
+                        allTimeMaxVolume = sessVol;
+                    }
+
+                    sessionsList.push({
+                        date: s.date || 'Unknown',
+                        timestamp: s.timestamp || 0,
+                        maxWeight: sessMaxW,
+                        repsAtMax: sessRepsAtMax,
+                        est1RM: sessMax1RM,
+                        volume: sessVol,
+                        sets: matchedSets
+                    });
+                }
+            });
+
+            return {
+                sessions: sessionsList,
+                allTimeMaxWeight,
+                repsAtMaxWeight,
+                allTimeMax1RM,
+                allTimeMaxVolume,
+                totalSessions: sessionsList.length
+            };
+        }
+        window.getExerciseHistory = getExerciseHistory;
+
+        function renderStrengthProgression(exerciseId = 'bench_press_barbell') {
+            const selectEl = document.getElementById('strengthExerciseSelect');
+            if (selectEl && selectEl.value !== exerciseId) {
+                selectEl.value = exerciseId;
+            }
+
+            const data = getExerciseHistory(exerciseId);
+
+            // Summary cards
+            const maxWEl = document.getElementById('strMaxWeight');
+            const est1RMEl = document.getElementById('strEst1RM');
+            const volEl = document.getElementById('strMaxVolume');
+            const sessEl = document.getElementById('strTotalSessions');
+
+            if (maxWEl) maxWEl.innerText = data.allTimeMaxWeight > 0 ? `${data.allTimeMaxWeight}kg` : '--';
+            if (est1RMEl) est1RMEl.innerText = data.allTimeMax1RM > 0 ? `${data.allTimeMax1RM}kg` : '--';
+            if (volEl) volEl.innerText = data.allTimeMaxVolume > 0 ? `${data.allTimeMaxVolume.toLocaleString()}kg` : '--';
+            if (sessEl) sessEl.innerText = data.totalSessions;
+
+            // Strength Progression Chart
+            const canvas = document.getElementById('strengthProgressionChart');
+            if (canvas && typeof Chart !== 'undefined') {
+                const sCtx = canvas.getContext('2d');
+                if (strengthChart) {
+                    strengthChart.destroy();
+                    strengthChart = null;
+                }
+
+                if (data.sessions.length > 0) {
+                    const labels = data.sessions.map(s => (s.date || '').slice(0, 6));
+                    const weightData = data.sessions.map(s => s.maxWeight);
+                    const oneRMData = data.sessions.map(s => s.est1RM);
+
+                    strengthChart = new Chart(sCtx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Best Weight (kg)',
+                                    data: weightData,
+                                    borderColor: '#38bdf8',
+                                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                                    borderWidth: 2,
+                                    fill: true,
+                                    tension: 0.3,
+                                    pointRadius: 3,
+                                    pointBackgroundColor: '#38bdf8'
+                                },
+                                {
+                                    label: 'Est. 1RM (kg)',
+                                    data: oneRMData,
+                                    borderColor: '#10b981',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [3, 3],
+                                    borderWidth: 1.5,
+                                    tension: 0.3,
+                                    pointRadius: 2.5,
+                                    pointBackgroundColor: '#10b981'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: { color: '#a3a3a3', font: { size: 9 }, boxWidth: 8, boxHeight: 8 }
+                                },
+                                tooltip: {
+                                    enabled: true,
+                                    callbacks: {
+                                        title: (items) => data.sessions[items[0].dataIndex]?.date || '',
+                                        label: (item) => `${item.dataset.label}: ${item.raw} kg`
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    grid: { color: '#262626' },
+                                    ticks: { font: { size: 9 }, callback: v => v + 'kg' }
+                                },
+                                x: {
+                                    grid: { display: false },
+                                    ticks: { font: { size: 8 } }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Recent sets history list
+            const listEl = document.getElementById('strengthSessionHistoryList');
+            if (listEl) {
+                if (data.sessions.length === 0) {
+                    listEl.innerHTML = `<p class="text-neutral-500 text-center py-3 text-xs">No strength workouts logged yet.</p>`;
+                } else {
+                    listEl.innerHTML = data.sessions.slice().reverse().map(sess => {
+                        const setsStr = sess.sets.map(st => `${st.weight}kg × ${st.reps}`).join(', ');
+                        return `
+                            <div class="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-2.5 flex items-center justify-between">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-white text-xs font-black">${sess.date}</span>
+                                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Max: ${sess.maxWeight}kg</span>
+                                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">1RM: ${sess.est1RM}kg</span>
+                                    </div>
+                                    <p class="text-[10px] text-neutral-400 mt-1">${setsStr}</p>
+                                </div>
+                                <div class="text-right shrink-0 ml-2">
+                                    <span class="text-[9px] text-neutral-500 block">Vol</span>
+                                    <span class="text-xs font-mono font-bold text-neutral-300">${sess.volume.toLocaleString()}kg</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+        window.renderStrengthProgression = renderStrengthProgression;
+
+        let modalChart = null;
+        function openExerciseProgressModal(exerciseId) {
+            let exId = exerciseId;
+            let exName = '';
+            if (!exId && activeWorkoutPreset && activeWorkoutPreset.exercises) {
+                const cur = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+                if (cur) {
+                    exId = cur.id;
+                    exName = cur.name;
+                }
+            }
+            if (!exId) exId = 'bench_press_barbell';
+
+            const modal = document.getElementById('exerciseProgressModal');
+            if (!modal) return;
+
+            const titleEl = document.getElementById('modalExTitle');
+            if (titleEl) titleEl.innerText = exName || exId.replace(/_/g, ' ').toUpperCase();
+
+            const data = getExerciseHistory(exId);
+
+            const prW = document.getElementById('modalPRWeight');
+            const pr1RM = document.getElementById('modalPR1RM');
+            const prSess = document.getElementById('modalTotalSessions');
+
+            if (prW) prW.innerText = data.allTimeMaxWeight > 0 ? `${data.allTimeMaxWeight}kg` : '--';
+            if (pr1RM) pr1RM.innerText = data.allTimeMax1RM > 0 ? `${data.allTimeMax1RM}kg` : '--';
+            if (prSess) prSess.innerText = data.totalSessions;
+
+            const mCanvas = document.getElementById('modalExerciseChart');
+            if (mCanvas && typeof Chart !== 'undefined') {
+                const mCtx = mCanvas.getContext('2d');
+                if (modalChart) {
+                    modalChart.destroy();
+                    modalChart = null;
+                }
+
+                if (data.sessions.length > 0) {
+                    modalChart = new Chart(mCtx, {
+                        type: 'line',
+                        data: {
+                            labels: data.sessions.map(s => (s.date || '').slice(0, 6)),
+                            datasets: [{
+                                label: 'Weight (kg)',
+                                data: data.sessions.map(s => s.maxWeight),
+                                borderColor: '#38bdf8',
+                                backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 3,
+                                pointBackgroundColor: '#38bdf8'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { grid: { color: '#262626' }, ticks: { font: { size: 9 } } },
+                                x: { grid: { display: false }, ticks: { font: { size: 8 } } }
+                            }
+                        }
+                    });
+                }
+            }
+
+            const listEl = document.getElementById('modalExHistoryList');
+            if (listEl) {
+                if (data.sessions.length === 0) {
+                    listEl.innerHTML = `<p class="text-neutral-500 text-center py-4 text-xs">No logged sessions yet for this exercise.</p>`;
+                } else {
+                    listEl.innerHTML = data.sessions.slice().reverse().map(sess => {
+                        const setsStr = sess.sets.map(st => `${st.weight}kg × ${st.reps}`).join(', ');
+                        return `
+                            <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-2 flex items-center justify-between">
+                                <div>
+                                    <span class="text-white text-xs font-black">${sess.date}</span>
+                                    <p class="text-[10px] text-neutral-400">${setsStr}</p>
+                                </div>
+                                <span class="text-[10px] font-bold text-emerald-400">${sess.est1RM}kg 1RM</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        window.openExerciseProgressModal = openExerciseProgressModal;
+
+        function closeExerciseProgressModal() {
+            const modal = document.getElementById('exerciseProgressModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+        window.closeExerciseProgressModal = closeExerciseProgressModal;
