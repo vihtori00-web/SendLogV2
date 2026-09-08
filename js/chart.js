@@ -1523,39 +1523,94 @@
             if (!audioCtx) return;
             try {
                 if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
                 const t = audioCtx.currentTime;
-                if (type === 'prep') {
-                    // countdown tick (short high tap)
+
+                if (type === 'prep' || type === 'prep_tick') {
+                    // Countdown tick (short high tap)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(880, t);
-                    gain.gain.setValueAtTime(0.3, t);
+                    gain.gain.setValueAtTime(0.35, t);
                     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
                     osc.start(t);
                     osc.stop(t + 0.08);
-                } else if (type === 'work') {
-                    // work start tone (bright higher tone)
+                } else if (type === 'work' || type === 'hang_start') {
+                    // Hang start tone: ascending potentiation chime (1320Hz -> 1760Hz)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
                     osc.type = 'sine';
-                    osc.frequency.setValueAtTime(1760, t);
-                    gain.gain.setValueAtTime(0.45, t);
-                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+                    osc.frequency.setValueAtTime(1320, t);
+                    osc.frequency.exponentialRampToValueAtTime(1760, t + 0.1);
+                    gain.gain.setValueAtTime(0.5, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
                     osc.start(t);
-                    osc.stop(t + 0.25);
-                } else if (type === 'rest') {
-                    // rest tone (calm lower tone)
+                    osc.stop(t + 0.3);
+                } else if (type === 'rest' || type === 'rep_rest') {
+                    // Rep rest / shakeout tone
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(523.25, t);
                     gain.gain.setValueAtTime(0.35, t);
                     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
                     osc.start(t);
                     osc.stop(t + 0.15);
+                } else if (type === 'hang_stop' || type === 'drop') {
+                    // Loud release tone / buzzer: descending pitch (880Hz -> 440Hz)
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(880, t);
+                    osc.frequency.exponentialRampToValueAtTime(440, t + 0.35);
+                    gain.gain.setValueAtTime(0.6, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                    osc.start(t);
+                    osc.stop(t + 0.4);
+                } else if (type === 'set_complete') {
+                    // Set completed fanfare chord (C5 -> E5 -> G5)
+                    [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                        const noteOsc = audioCtx.createOscillator();
+                        const noteGain = audioCtx.createGain();
+                        noteOsc.connect(noteGain);
+                        noteGain.connect(audioCtx.destination);
+                        noteOsc.type = 'sine';
+                        noteOsc.frequency.setValueAtTime(freq, t + (idx * 0.08));
+                        noteGain.gain.setValueAtTime(0.4, t + (idx * 0.08));
+                        noteGain.gain.exponentialRampToValueAtTime(0.001, t + (idx * 0.08) + 0.25);
+                        noteOsc.start(t + (idx * 0.08));
+                        noteOsc.stop(t + (idx * 0.08) + 0.25);
+                    });
                 }
             } catch (e) { }
         }
         window.playIntervalBeep = playIntervalBeep;
+
+        function playHangVibration(type = 'work') {
+            if (!('vibrate' in navigator)) return;
+            try {
+                if (type === 'prep') {
+                    navigator.vibrate(30);
+                } else if (type === 'work' || type === 'hang_start') {
+                    navigator.vibrate(120);
+                } else if (type === 'hang_stop' || type === 'drop') {
+                    navigator.vibrate([150, 80, 200, 80, 300]);
+                } else if (type === 'set_complete') {
+                    navigator.vibrate([100, 50, 100, 50, 250]);
+                } else {
+                    navigator.vibrate(40);
+                }
+            } catch (e) { }
+        }
+        window.playHangVibration = playHangVibration;
 
         // -- LOGIC: REST TIMER --
         let restTimerInterval = null;
@@ -1731,6 +1786,8 @@
         window.getRestTimerRemaining = () => restTimerInterval ? restTimeRemaining : defaultRestSeconds;
         window.getDefaultRestSeconds = () => defaultRestSeconds;
         window.setDefaultRestSeconds = (secs) => { if (secs > 0) defaultRestSeconds = secs; updateRestTimerDisplay(); };
+        window.requestScreenWakeLock = requestScreenWakeLock;
+        window.releaseScreenWakeLock = releaseScreenWakeLock;
 
 
 

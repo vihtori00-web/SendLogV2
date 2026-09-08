@@ -983,6 +983,7 @@
                     badge: preset.badge,
                     durationMinutes: preset.durationMinutes,
                     desc: preset.desc,
+                    hangConfig: preset.hangConfig ? { ...preset.hangConfig } : null,
                     exercises: (preset.exercises || []).map(ex => ({
                         id: ex.id,
                         name: ex.name,
@@ -991,9 +992,14 @@
                         restSeconds: ex.restSeconds || 60,
                         desc: ex.desc || '',
                         trackWeight: !!ex.trackWeight,
-                        defaultWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : 60,
+                        isHang: !!ex.isHang || !!(preset.hangConfig && preset.hangConfig.isHang),
+                        hangSeconds: ex.hangSeconds !== undefined ? ex.hangSeconds : (preset.hangConfig ? preset.hangConfig.hangSeconds : 10),
+                        repRestSeconds: ex.repRestSeconds !== undefined ? ex.repRestSeconds : (preset.hangConfig ? preset.hangConfig.repRestSeconds : 0),
+                        repsPerSet: ex.repsPerSet !== undefined ? ex.repsPerSet : (preset.hangConfig ? preset.hangConfig.repsPerSet : 1),
+                        prepSeconds: ex.prepSeconds !== undefined ? ex.prepSeconds : (preset.hangConfig ? preset.hangConfig.prepSeconds : 5),
+                        defaultWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : (ex.trackWeight ? 60 : 0),
                         defaultReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
-                        activeWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : 60,
+                        activeWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : (ex.trackWeight ? 60 : 0),
                         activeReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
                         completedSets: ex.completedSets || 0,
                         setsData: ex.setsData ? [...ex.setsData] : []
@@ -1170,6 +1176,334 @@
         }
         window.startPresetWorkout = startPresetWorkout;
 
+        // ==========================================
+        // HANG TIMER ENGINE & PROTOCOL STATE MACHINE
+        // ==========================================
+        let hangTimerState = 'idle'; // 'idle' | 'prep' | 'hang' | 'rep_rest' | 'paused'
+        let hangPreviousState = 'idle';
+        let hangTimerInterval = null;
+        let hangTargetEpoch = 0;
+        let hangTimeRemaining = 0;
+        let hangPhaseTotalDuration = 0;
+        let hangCurrentRep = 1;
+        let hangTotalReps = 1;
+        let hangRemainingMsOnPause = 0;
+
+        function setCustomHangSeconds(secs) {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+            currentEx.hangSeconds = secs;
+            renderWorkoutHUD();
+            saveActiveSession();
+            if ('vibrate' in navigator) navigator.vibrate(15);
+        }
+        window.setCustomHangSeconds = setCustomHangSeconds;
+
+        function updateHangOverlayUI() {
+            const overlay = document.getElementById('hangTimerOverlay');
+            if (!overlay || overlay.classList.contains('hidden')) return;
+
+            const setLabel = document.getElementById('hangOverlaySetLabel');
+            const phaseBadge = document.getElementById('hangOverlayPhaseBadge');
+            const subtitle = document.getElementById('hangOverlaySubtitle');
+            const digits = document.getElementById('hangOverlayDigits');
+            const progress = document.getElementById('hangOverlayProgressBar');
+            const repCounter = document.getElementById('hangOverlayRepCounter');
+            const pauseIcon = document.getElementById('hangOverlayPauseIcon');
+            const pauseText = document.getElementById('hangOverlayPauseText');
+
+            if (!activeWorkoutPreset) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            const isRepeaters = activeWorkoutPreset.id === 'repeaters_7_3';
+
+            if (setLabel) {
+                setLabel.innerText = isRepeaters 
+                    ? `Set ${activeWorkoutExIndex + 1} of ${activeWorkoutPreset.exercises.length}`
+                    : `Hang ${activeWorkoutExIndex + 1} of ${activeWorkoutPreset.exercises.length}`;
+            }
+
+            if (repCounter) {
+                if (hangTotalReps > 1) {
+                    repCounter.style.display = 'block';
+                    repCounter.innerText = `Rep ${hangCurrentRep} of ${hangTotalReps}`;
+                } else {
+                    repCounter.style.display = 'none';
+                }
+            }
+
+            if (digits) {
+                digits.innerText = hangTimeRemaining;
+            }
+
+            // Progress bar percentage
+            if (progress && hangPhaseTotalDuration > 0) {
+                const pct = Math.max(0, Math.min(100, (hangTimeRemaining / hangPhaseTotalDuration) * 100));
+                progress.style.width = `${pct}%`;
+            }
+
+            // Phase-specific visuals
+            if (hangTimerState === 'paused') {
+                if (phaseBadge) {
+                    phaseBadge.innerText = 'PAUSED';
+                    phaseBadge.className = 'text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-neutral-800 text-neutral-300 border border-neutral-700';
+                }
+                if (subtitle) subtitle.innerText = 'Timer Paused · Tap Resume to Continue';
+                if (digits) digits.className = 'text-[7.5rem] sm:text-[9.5rem] font-black tracking-tighter leading-none font-mono text-neutral-400 select-none';
+                if (pauseIcon) pauseIcon.innerText = '▶️';
+                if (pauseText) pauseText.innerText = 'Resume';
+            } else if (hangTimerState === 'prep') {
+                if (phaseBadge) {
+                    phaseBadge.innerText = 'GET READY';
+                    phaseBadge.className = 'text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40';
+                }
+                if (subtitle) subtitle.innerText = 'Hands on Board · Establish Grip';
+                if (digits) digits.className = 'text-[7.5rem] sm:text-[9.5rem] font-black tracking-tighter leading-none font-mono text-amber-400 drop-shadow-[0_0_40px_rgba(245,158,11,0.35)] select-none';
+                if (progress) progress.className = 'h-full bg-amber-400 transition-all duration-200';
+                if (pauseIcon) pauseIcon.innerText = '⏸️';
+                if (pauseText) pauseText.innerText = 'Pause';
+            } else if (hangTimerState === 'hang') {
+                if (phaseBadge) {
+                    phaseBadge.innerText = 'HANG!';
+                    phaseBadge.className = 'text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse';
+                }
+                if (subtitle) subtitle.innerText = 'STRICT HALF-CRIMP · HOLD ON!';
+                if (digits) digits.className = 'text-[7.5rem] sm:text-[9.5rem] font-black tracking-tighter leading-none font-mono text-emerald-400 drop-shadow-[0_0_40px_rgba(16,185,129,0.4)] select-none';
+                if (progress) progress.className = 'h-full bg-emerald-500 transition-all duration-200';
+                if (pauseIcon) pauseIcon.innerText = '⏸️';
+                if (pauseText) pauseText.innerText = 'Pause';
+            } else if (hangTimerState === 'rep_rest') {
+                if (phaseBadge) {
+                    phaseBadge.innerText = 'SHAKE';
+                    phaseBadge.className = 'text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/40';
+                }
+                if (subtitle) subtitle.innerText = 'SHAKE HANDS · CHALK UP';
+                if (digits) digits.className = 'text-[7.5rem] sm:text-[9.5rem] font-black tracking-tighter leading-none font-mono text-cyan-400 drop-shadow-[0_0_40px_rgba(6,182,212,0.35)] select-none';
+                if (progress) progress.className = 'h-full bg-cyan-400 transition-all duration-200';
+                if (pauseIcon) pauseIcon.innerText = '⏸️';
+                if (pauseText) pauseText.innerText = 'Pause';
+            }
+        }
+
+        function startHangTimer() {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            const overlay = document.getElementById('hangTimerOverlay');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+            }
+
+            if (typeof window.requestScreenWakeLock === 'function') {
+                window.requestScreenWakeLock();
+            }
+
+            const prepSecs = typeof currentEx.prepSeconds === 'number' ? currentEx.prepSeconds : 5;
+            hangTotalReps = currentEx.repsPerSet || 1;
+            hangCurrentRep = 1;
+
+            transitionHangState('prep', prepSecs);
+        }
+        window.startHangTimer = startHangTimer;
+
+        function transitionHangState(newState, durationSecs) {
+            if (hangTimerInterval) {
+                clearInterval(hangTimerInterval);
+                hangTimerInterval = null;
+            }
+
+            hangTimerState = newState;
+            hangPhaseTotalDuration = durationSecs;
+            hangTimeRemaining = durationSecs;
+            hangTargetEpoch = Date.now() + (durationSecs * 1000);
+
+            if (newState === 'prep') {
+                if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('prep');
+                if (typeof window.playHangVibration === 'function') window.playHangVibration('prep');
+            } else if (newState === 'hang') {
+                if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('hang_start');
+                if (typeof window.playHangVibration === 'function') window.playHangVibration('hang_start');
+            } else if (newState === 'rep_rest') {
+                if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('rep_rest');
+                if (typeof window.playHangVibration === 'function') window.playHangVibration('prep');
+            }
+
+            updateHangOverlayUI();
+
+            let lastSecondsTicked = hangTimeRemaining;
+
+            hangTimerInterval = setInterval(() => {
+                const remaining = Math.max(0, Math.ceil((hangTargetEpoch - Date.now()) / 1000));
+                hangTimeRemaining = remaining;
+                updateHangOverlayUI();
+
+                // Audible countdown tick on last 3 seconds
+                if (remaining <= 3 && remaining > 0 && remaining !== lastSecondsTicked) {
+                    lastSecondsTicked = remaining;
+                    if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('prep');
+                    if (typeof window.playHangVibration === 'function') window.playHangVibration('prep');
+                }
+
+                if (remaining <= 0) {
+                    clearInterval(hangTimerInterval);
+                    hangTimerInterval = null;
+                    handleHangPhaseComplete();
+                }
+            }, 100);
+        }
+
+        function handleHangPhaseComplete() {
+            if (!activeWorkoutPreset) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            const hangSecs = currentEx.hangSeconds || 10;
+            const repRestSecs = currentEx.repRestSeconds || 3;
+
+            if (hangTimerState === 'prep') {
+                // Transition from prep into hang
+                transitionHangState('hang', hangSecs);
+            } else if (hangTimerState === 'hang') {
+                // Hang duration fulfilled!
+                // Loud release buzzer & distinct vibration
+                if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('hang_stop');
+                if (typeof window.playHangVibration === 'function') window.playHangVibration('hang_stop');
+
+                // High-visibility release flash
+                const flash = document.getElementById('hangOverlayReleaseFlash');
+                if (flash) {
+                    flash.classList.remove('hidden');
+                    flash.classList.add('flex');
+                    setTimeout(() => {
+                        flash.classList.remove('flex');
+                        flash.classList.add('hidden');
+                    }, 1200);
+                }
+
+                if (hangCurrentRep < hangTotalReps) {
+                    // Shakeout before next rep
+                    transitionHangState('rep_rest', repRestSecs);
+                } else {
+                    // Entire set or hang completed!
+                    completeHangSet();
+                }
+            } else if (hangTimerState === 'rep_rest') {
+                // Shakeout completed: move to next rep
+                hangCurrentRep++;
+                transitionHangState('hang', hangSecs);
+            }
+        }
+
+        function completeHangSet() {
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises) return;
+            const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+            if (!currentEx) return;
+
+            const setRestSecs = currentEx.restSeconds || 180;
+
+            if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('set_complete');
+            if (typeof window.playHangVibration === 'function') window.playHangVibration('set_complete');
+
+            // Mark set completed
+            currentEx.completedSets = (currentEx.completedSets || 0) + 1;
+            const activeW = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 0);
+            currentEx.setsData = currentEx.setsData || [];
+            currentEx.setsData[currentEx.completedSets - 1] = {
+                set: currentEx.completedSets,
+                weight: currentEx.trackWeight ? activeW : 0,
+                reps: currentEx.repsPerSet || 1,
+                hangSeconds: currentEx.hangSeconds || 10,
+                completed: true
+            };
+
+            saveActiveSession();
+            recomputeSessionScore();
+            renderSessionList();
+
+            // Stop hang timer & hide overlay
+            stopHangTimer(false);
+
+            // Auto-transition into set rest countdown
+            if (typeof window.startRestTimer === 'function') {
+                window.startRestTimer(setRestSecs, true);
+            }
+
+            // If more hangs/sets exist in preset, advance to next
+            if (activeWorkoutExIndex < activeWorkoutPreset.exercises.length - 1) {
+                activeWorkoutExIndex++;
+            }
+            renderWorkoutHUD();
+        }
+
+        function togglePauseHangTimer() {
+            if (hangTimerState === 'paused') {
+                // Resume
+                hangTimerState = hangPreviousState;
+                hangTargetEpoch = Date.now() + hangRemainingMsOnPause;
+                transitionHangState(hangTimerState, Math.max(1, Math.ceil(hangRemainingMsOnPause / 1000)));
+            } else if (hangTimerInterval) {
+                // Pause
+                clearInterval(hangTimerInterval);
+                hangTimerInterval = null;
+                hangRemainingMsOnPause = Math.max(0, hangTargetEpoch - Date.now());
+                hangPreviousState = hangTimerState;
+                hangTimerState = 'paused';
+                updateHangOverlayUI();
+            }
+        }
+        window.togglePauseHangTimer = togglePauseHangTimer;
+
+        function skipHangPhase() {
+            if (hangTimerInterval) {
+                clearInterval(hangTimerInterval);
+                hangTimerInterval = null;
+            }
+            handleHangPhaseComplete();
+        }
+        window.skipHangPhase = skipHangPhase;
+
+        function stopHangTimer(releaseWakeLock = true) {
+            if (hangTimerInterval) {
+                clearInterval(hangTimerInterval);
+                hangTimerInterval = null;
+            }
+            hangTimerState = 'idle';
+            const overlay = document.getElementById('hangTimerOverlay');
+            if (overlay) {
+                overlay.classList.remove('flex');
+                overlay.classList.add('hidden');
+            }
+            if (releaseWakeLock && typeof window.releaseScreenWakeLock === 'function') {
+                window.releaseScreenWakeLock();
+            }
+        }
+        window.stopHangTimer = stopHangTimer;
+        window.getHangTimerState = () => hangTimerState;
+        window.getHangTimeRemaining = () => hangTimeRemaining;
+        window.getHangCurrentRep = () => hangCurrentRep;
+
+        // Wall-clock recovery for hang timer
+        function syncHangTimerFromWallClock() {
+            if (hangTimerInterval && hangTimerState !== 'paused' && hangTimerState !== 'idle') {
+                const remaining = Math.max(0, Math.ceil((hangTargetEpoch - Date.now()) / 1000));
+                hangTimeRemaining = remaining;
+                updateHangOverlayUI();
+                if (remaining <= 0) {
+                    clearInterval(hangTimerInterval);
+                    hangTimerInterval = null;
+                    handleHangPhaseComplete();
+                }
+            }
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                syncHangTimerFromWallClock();
+            }
+        });
+        window.addEventListener('focus', syncHangTimerFromWallClock);
+
         function renderWorkoutHUD() {
             if (!activeWorkoutPreset || !activeWorkoutPreset.exercises || activeWorkoutPreset.exercises.length === 0) return;
 
@@ -1224,8 +1558,8 @@
                     weightRepsContainer.classList.remove('hidden');
                     weightRepsContainer.classList.add('flex');
 
-                    const activeW = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 60);
-                    const activeR = typeof currentEx.activeReps === 'number' ? currentEx.activeReps : (currentEx.defaultReps || 6);
+                    const activeW = typeof currentEx.activeWeight === 'number' ? currentEx.activeWeight : (currentEx.defaultWeight || 0);
+                    const activeR = typeof currentEx.activeReps === 'number' ? currentEx.activeReps : (currentEx.defaultReps || 1);
 
                     const inputW = document.getElementById('workoutInputWeight');
                     const inputR = document.getElementById('workoutInputReps');
@@ -1244,6 +1578,53 @@
                 } else {
                     weightRepsContainer.classList.add('hidden');
                     weightRepsContainer.classList.remove('flex');
+                }
+            }
+
+            // Hangboard Controller Handling
+            const hangController = document.getElementById('workoutHangController');
+            const setsPrompt = document.getElementById('workoutSetsPrompt');
+            const isHangWorkout = !!currentEx.isHang || (activeWorkoutPreset && activeWorkoutPreset.category === 'hangboard');
+            if (hangController) {
+                if (isHangWorkout) {
+                    hangController.classList.remove('hidden');
+                    hangController.classList.add('flex');
+                    if (setsPrompt) setsPrompt.innerText = 'Or tap set to mark manually:';
+
+                    const isRepeaters = activeWorkoutPreset.id === 'repeaters_7_3';
+                    const startBtnLabel = document.getElementById('btnStartHangLabel');
+                    const helperPrompt = document.getElementById('hangHelperPrompt');
+                    const protocolBadge = document.getElementById('hangPresetProtocolBadge');
+                    const durationRow = document.getElementById('hangDurationChipsRow');
+
+                    const hangSecs = currentEx.hangSeconds || 10;
+
+                    if (isRepeaters) {
+                        if (startBtnLabel) startBtnLabel.innerText = `START SET ${activeWorkoutExIndex + 1} (6 × 7:3)`;
+                        if (helperPrompt) helperPrompt.innerText = '5s Prep → 6 × (7s Hang / 3s Shake) → Auto 2.5m Rest';
+                        if (protocolBadge) protocolBadge.innerText = '7s/3s × 6';
+                        if (durationRow) durationRow.classList.add('hidden');
+                    } else {
+                        if (startBtnLabel) startBtnLabel.innerText = `START HANG ${activeWorkoutExIndex + 1} (${hangSecs}s)`;
+                        if (helperPrompt) helperPrompt.innerText = `5s Prep Chime → ${hangSecs}s Hang → Release Buzzer`;
+                        if (protocolBadge) protocolBadge.innerText = `${hangSecs}s @ Max`;
+                        if (durationRow) durationRow.classList.remove('hidden');
+
+                        [5, 7, 10, 15].forEach(s => {
+                            const chip = document.getElementById('hangSecChip_' + s);
+                            if (chip) {
+                                if (s === hangSecs) {
+                                    chip.className = 'px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-emerald-500 text-black shadow-sm';
+                                } else {
+                                    chip.className = 'px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white';
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    hangController.classList.add('hidden');
+                    hangController.classList.remove('flex');
+                    if (setsPrompt) setsPrompt.innerText = 'Tap set to log weight & reps:';
                 }
             }
 

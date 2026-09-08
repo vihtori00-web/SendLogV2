@@ -85,11 +85,19 @@ const Planner = (function () {
             badge: 'Hangboard',
             durationMinutes: 20,
             desc: 'Classic Lattice finger endurance protocol: 6 reps of 7s on / 3s off per set on a 20mm edge.',
+            hangConfig: {
+                isHang: true,
+                hangSeconds: 7,
+                repRestSeconds: 3,
+                repsPerSet: 6,
+                prepSeconds: 5,
+                setRestSeconds: 150
+            },
             exercises: [
-                { id: 'rep_set_1', name: 'Set 1: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Half-crimp or open-hand on 20mm edge at bodyweight. Strict audio interval.' },
-                { id: 'rep_set_2', name: 'Set 2: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Maintain open chest and active scapular retraction.' },
-                { id: 'rep_set_3', name: 'Set 3: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Do not crimp with thumb wrap. Strict form.' },
-                { id: 'rep_set_4', name: 'Set 4: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, desc: 'Final round of aerobic recruitment.' }
+                { id: 'rep_set_1', name: 'Set 1: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, isHang: true, hangSeconds: 7, repRestSeconds: 3, repsPerSet: 6, prepSeconds: 5, desc: 'Half-crimp or open-hand on 20mm edge at bodyweight. Strict audio interval.' },
+                { id: 'rep_set_2', name: 'Set 2: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, isHang: true, hangSeconds: 7, repRestSeconds: 3, repsPerSet: 6, prepSeconds: 5, desc: 'Maintain open chest and active scapular retraction.' },
+                { id: 'rep_set_3', name: 'Set 3: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, isHang: true, hangSeconds: 7, repRestSeconds: 3, repsPerSet: 6, prepSeconds: 5, desc: 'Do not crimp with thumb wrap. Strict form.' },
+                { id: 'rep_set_4', name: 'Set 4: 7:3 Repeaters (6 reps)', sets: 1, reps: '6 reps (7s on / 3s off)', restSeconds: 150, isHang: true, hangSeconds: 7, repRestSeconds: 3, repsPerSet: 6, prepSeconds: 5, desc: 'Final round of aerobic recruitment.' }
             ]
         },
         {
@@ -101,12 +109,21 @@ const Planner = (function () {
             badge: 'Hangboard',
             durationMinutes: 25,
             desc: '5 sets of 10s hangs at 85-90% max load on 18-20mm edge with full 3m neural recovery between hangs.',
+            hangConfig: {
+                isHang: true,
+                hangSeconds: 10,
+                repRestSeconds: 0,
+                repsPerSet: 1,
+                prepSeconds: 5,
+                setRestSeconds: 180,
+                trackWeight: true
+            },
             exercises: [
-                { id: 'max_hang_1', name: 'Hang 1 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Strict half-crimp on 18–20mm edge. Full 3m rest.' },
-                { id: 'max_hang_2', name: 'Hang 2 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Maintain scapular engagement throughout.' },
-                { id: 'max_hang_3', name: 'Hang 3 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Maximum motor unit recruitment.' },
-                { id: 'max_hang_4', name: 'Hang 4 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Discontinue immediately if form slips.' },
-                { id: 'max_hang_5', name: 'Hang 5 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, desc: 'Final neural recruitment repetition.' }
+                { id: 'max_hang_1', name: 'Hang 1 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, isHang: true, hangSeconds: 10, repRestSeconds: 0, repsPerSet: 1, prepSeconds: 5, trackWeight: true, defaultWeight: 0, defaultReps: 1, desc: 'Strict half-crimp on 18–20mm edge. Full 3m rest.' },
+                { id: 'max_hang_2', name: 'Hang 2 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, isHang: true, hangSeconds: 10, repRestSeconds: 0, repsPerSet: 1, prepSeconds: 5, trackWeight: true, defaultWeight: 0, defaultReps: 1, desc: 'Maintain scapular engagement throughout.' },
+                { id: 'max_hang_3', name: 'Hang 3 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, isHang: true, hangSeconds: 10, repRestSeconds: 0, repsPerSet: 1, prepSeconds: 5, trackWeight: true, defaultWeight: 0, defaultReps: 1, desc: 'Maximum motor unit recruitment.' },
+                { id: 'max_hang_4', name: 'Hang 4 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, isHang: true, hangSeconds: 10, repRestSeconds: 0, repsPerSet: 1, prepSeconds: 5, trackWeight: true, defaultWeight: 0, defaultReps: 1, desc: 'Discontinue immediately if form slips.' },
+                { id: 'max_hang_5', name: 'Hang 5 (10s @ Max Effort)', sets: 1, reps: '10s hang', restSeconds: 180, isHang: true, hangSeconds: 10, repRestSeconds: 0, repsPerSet: 1, prepSeconds: 5, trackWeight: true, defaultWeight: 0, defaultReps: 1, desc: 'Final neural recruitment repetition.' }
             ]
         },
         {

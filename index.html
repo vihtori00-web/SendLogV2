@@ -67,6 +67,53 @@
         </div>
     </div>
 
+    <!-- CHALK-FRIENDLY HANG TIMER OVERLAY -->
+    <div id="hangTimerOverlay" class="fixed inset-0 z-[65] bg-neutral-950/98 backdrop-blur-md hidden flex-col items-center justify-between p-6 sm:p-8" style="touch-action: none;">
+        <!-- Top status bar -->
+        <div class="w-full max-w-md flex items-center justify-between">
+            <span id="hangOverlaySetLabel" class="text-xs font-black uppercase tracking-wider text-neutral-400">Hang 1 of 5</span>
+            <span id="hangOverlayPhaseBadge" class="text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">GET READY</span>
+            <button onclick="stopHangTimer()" class="text-neutral-500 hover:text-white p-2 haptic-feedback">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+
+        <!-- Center Hang Clock & Instruction -->
+        <div class="flex flex-col items-center justify-center w-full my-auto text-center">
+            <div id="hangOverlaySubtitle" class="text-xs sm:text-sm font-black uppercase tracking-widest text-neutral-400 mb-2">Hands on Board · Strict Half-Crimp</div>
+            <div id="hangOverlayDigits" class="text-[7.5rem] sm:text-[9.5rem] font-black tracking-tighter leading-none font-mono text-amber-400 drop-shadow-[0_0_40px_rgba(245,158,11,0.35)] select-none">5</div>
+            
+            <!-- Progress Bar -->
+            <div class="w-full max-w-xs bg-neutral-900 rounded-full h-2.5 overflow-hidden border border-neutral-800 my-4">
+                <div id="hangOverlayProgressBar" class="h-full bg-amber-400 transition-all duration-200" style="width: 100%;"></div>
+            </div>
+
+            <!-- Rep indicator (for repeaters) -->
+            <div id="hangOverlayRepCounter" class="text-xs font-bold text-neutral-400">Rep 1 of 6</div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="w-full max-w-md flex gap-3 justify-center">
+            <button id="hangOverlayPauseBtn" onclick="togglePauseHangTimer()" class="flex-1 py-4 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-white font-black text-xs uppercase tracking-wider rounded-2xl haptic-feedback active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+                <span id="hangOverlayPauseIcon">⏸️</span>
+                <span id="hangOverlayPauseText">Pause</span>
+            </button>
+            <button onclick="skipHangPhase()" class="flex-1 py-4 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 font-black text-xs uppercase tracking-wider rounded-2xl haptic-feedback active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+                <span>⏭️</span>
+                <span>Skip</span>
+            </button>
+            <button onclick="stopHangTimer()" class="flex-1 py-4 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-400 font-black text-xs uppercase tracking-wider rounded-2xl haptic-feedback active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg">
+                <span>⏹️</span>
+                <span>Exit</span>
+            </button>
+        </div>
+
+        <!-- Release / Drop Flash overlay -->
+        <div id="hangOverlayReleaseFlash" class="absolute inset-0 bg-emerald-500 hidden flex-col items-center justify-center z-20 pointer-events-none">
+            <span class="text-black font-black tracking-widest text-7xl text-center leading-none">DROP!<br>DONE!</span>
+        </div>
+    </div>
+
     <!-- Session Summary Overlay -->
     <div id="sessionSummaryOverlay" class="fixed inset-0 z-[70] bg-neutral-950/95 backdrop-blur-md hidden flex-col items-center justify-center p-6" style="touch-action: none;">
         <div class="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
@@ -352,9 +399,29 @@
                             </div>
                         </div>
 
+                        <!-- Interactive Hang Controller (Displayed when exercise is a hanging workout) -->
+                        <div id="workoutHangController" class="hidden flex-col gap-2.5 my-2.5 p-3.5 bg-neutral-950/90 rounded-2xl border border-emerald-500/30 shadow-[0_0_25px_rgba(16,185,129,0.12)]">
+                            <button id="btnStartHangWorkout" type="button" onclick="startHangTimer()" class="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.2em] text-sm sm:text-base shadow-xl shadow-emerald-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5">
+                                <span class="text-xl">🚀</span>
+                                <span id="btnStartHangLabel">START HANG (10s)</span>
+                            </button>
+                            <div class="flex items-center justify-between text-[10px] text-neutral-400 px-1 font-bold">
+                                <span id="hangHelperPrompt">5s Prep Chime → 10s Hang → Release Buzzer</span>
+                                <span id="hangPresetProtocolBadge" class="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-emerald-400 font-mono">10s @ Max</span>
+                            </div>
+                            <!-- Hang Duration Custom Quick Chips -->
+                            <div id="hangDurationChipsRow" class="flex items-center justify-center gap-1.5 pt-1.5 border-t border-neutral-900">
+                                <span class="text-[9px] uppercase font-black tracking-wider text-neutral-500">Hang:</span>
+                                <button type="button" onclick="setCustomHangSeconds(5)" id="hangSecChip_5" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">5s</button>
+                                <button type="button" onclick="setCustomHangSeconds(7)" id="hangSecChip_7" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">7s</button>
+                                <button type="button" onclick="setCustomHangSeconds(10)" id="hangSecChip_10" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">10s</button>
+                                <button type="button" onclick="setCustomHangSeconds(15)" id="hangSecChip_15" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">15s</button>
+                            </div>
+                        </div>
+
                         <!-- Interactive Set Checkboxes -->
                         <div class="my-3">
-                            <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Tap set to log weight & reps:</p>
+                            <p id="workoutSetsPrompt" class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Tap set to log weight & reps:</p>
                             <div id="workoutSetsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 <!-- Dynamic set buttons injected by renderWorkoutHUD() -->
                             </div>
