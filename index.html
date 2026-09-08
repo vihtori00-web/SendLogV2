@@ -50,20 +50,31 @@
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
         
+        <!-- Context Label for What We're Resting For -->
+        <div id="restOverlayContextLabel" class="text-xs sm:text-sm font-black uppercase tracking-widest text-emerald-400 mb-2">Rest Between Sets</div>
+
         <!-- Timer Display -->
-        <div id="restOverlayTime" class="text-[8rem] font-black text-emerald-400 tracking-tighter leading-none mb-12 font-mono drop-shadow-[0_0_30px_rgba(16,185,129,0.3)]">2:00</div>
+        <div id="restOverlayTime" class="text-[8rem] font-black text-emerald-400 tracking-tighter leading-none mb-10 font-mono drop-shadow-[0_0_30px_rgba(16,185,129,0.3)]">2:00</div>
         
         <!-- Controls -->
         <div class="flex gap-6 w-full max-w-sm px-6">
             <button onclick="adjRestTimer(-30)" class="flex-1 bg-neutral-900 border border-neutral-800 text-neutral-400 py-6 text-2xl font-black rounded-3xl haptic-feedback active:bg-neutral-800 transition-all shadow-xl">-30s</button>
             <button onclick="adjRestTimer(30)" class="flex-1 bg-neutral-900 border border-neutral-800 text-neutral-400 py-6 text-2xl font-black rounded-3xl haptic-feedback active:bg-neutral-800 transition-all shadow-xl">+30s</button>
         </div>
+
+        <!-- Skip to Next Hang Button (Visible during hangboard workouts) -->
+        <button id="restOverlaySkipToHangBtn" onclick="skipRestAndStartNextHang()" class="hidden mt-6 bg-emerald-500/20 border border-emerald-500/50 hover:bg-emerald-500/30 text-emerald-400 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider haptic-feedback active:scale-95 transition-all shadow-lg flex items-center gap-2">
+            <span>🚀</span>
+            <span id="restOverlaySkipToHangLabel">Skip Rest & Start Next Hang</span>
+        </button>
         
-        <button onclick="cancelRestTimer()" class="mt-8 text-red-500 border border-red-500/20 bg-red-500/10 px-6 py-3 rounded-full font-bold text-sm haptic-feedback tracking-widest">CANCEL TIMER</button>
+        <button onclick="cancelRestTimer()" class="mt-6 text-red-500 border border-red-500/20 bg-red-500/10 px-6 py-2.5 rounded-full font-bold text-xs haptic-feedback tracking-widest">CANCEL TIMER</button>
 
         <!-- Finished Message -->
-        <div id="restOverlayFinished" class="absolute inset-0 bg-emerald-500 hidden flex-col items-center justify-center z-10" onclick="this.classList.replace('flex','hidden'); document.getElementById('restOverlay').classList.replace('flex','hidden')">
-            <span class="text-black font-black tracking-widest text-7xl text-center leading-none">GO<br>CLIMB!</span>
+        <div id="restOverlayFinished" class="absolute inset-0 bg-emerald-500 hidden flex-col items-center justify-center z-10 p-6 text-center" onclick="handleRestOverlayFinishedClick()">
+            <div id="restFinishedContent" class="flex flex-col items-center gap-4">
+                <span id="restFinishedTitle" class="text-black font-black tracking-widest text-6xl sm:text-7xl text-center leading-none block">GO<br>CLIMB!</span>
+            </div>
         </div>
     </div>
 

@@ -681,6 +681,44 @@
                         restoreTrainingUI();
                     }
 
+                    // Reconcile hang properties for restored workout presets from localStorage
+                    if (sessionWorkouts && sessionWorkouts.length > 0) {
+                        sessionWorkouts.forEach(w => {
+                            if (typeof Planner !== 'undefined' && typeof Planner.getWorkoutPreset === 'function') {
+                                const canon = Planner.getWorkoutPreset(w.id);
+                                if (canon && Array.isArray(w.exercises)) {
+                                    w.exercises.forEach((ex, idx) => {
+                                        const canonEx = (canon.exercises || [])[idx] || ex;
+                                        const cfg = getExerciseHangConfig(canon, canonEx);
+                                        if (cfg.isHang) {
+                                            ex.isHang = true;
+                                            if (typeof ex.hangSeconds !== 'number' || ex.hangSeconds === 0) ex.hangSeconds = cfg.hangSeconds;
+                                            if (typeof ex.repRestSeconds !== 'number') ex.repRestSeconds = cfg.repRestSeconds;
+                                            if (typeof ex.repsPerSet !== 'number' || ex.repsPerSet === 0) ex.repsPerSet = cfg.repsPerSet;
+                                            if (typeof ex.prepSeconds !== 'number' || ex.prepSeconds === 0) ex.prepSeconds = cfg.prepSeconds;
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    if (activeWorkoutPreset && typeof Planner !== 'undefined' && typeof Planner.getWorkoutPreset === 'function') {
+                        const canon = Planner.getWorkoutPreset(activeWorkoutPreset.id);
+                        if (canon && Array.isArray(activeWorkoutPreset.exercises)) {
+                            activeWorkoutPreset.exercises.forEach((ex, idx) => {
+                                const canonEx = (canon.exercises || [])[idx] || ex;
+                                const cfg = getExerciseHangConfig(canon, canonEx);
+                                if (cfg.isHang) {
+                                    ex.isHang = true;
+                                    if (typeof ex.hangSeconds !== 'number' || ex.hangSeconds === 0) ex.hangSeconds = cfg.hangSeconds;
+                                    if (typeof ex.repRestSeconds !== 'number') ex.repRestSeconds = cfg.repRestSeconds;
+                                    if (typeof ex.repsPerSet !== 'number' || ex.repsPerSet === 0) ex.repsPerSet = cfg.repsPerSet;
+                                    if (typeof ex.prepSeconds !== 'number' || ex.prepSeconds === 0) ex.prepSeconds = cfg.prepSeconds;
+                                }
+                            });
+                        }
+                    }
+
                     if (activeLogMode === 'workout') {
                         switchLogMode('workout');
                     } else if (activeWorkoutPreset) {
@@ -960,12 +998,72 @@
         }
         window.switchLogMode = switchLogMode;
 
+        function getExerciseHangConfig(preset, ex) {
+            const isRepeaters = (preset && preset.id === 'repeaters_7_3') || (ex && ex.id && ex.id.startsWith('rep_set_'));
+            const isMaxHangs = (preset && preset.id === 'max_hangs') || (ex && ex.id && ex.id.startsWith('max_hang_'));
+            const isHang = !!(ex && ex.isHang) || isRepeaters || isMaxHangs || !!(preset && preset.category === 'hangboard') || !!(preset && preset.hangConfig && preset.hangConfig.isHang);
+
+            if (isRepeaters) {
+                return {
+                    isHang: true,
+                    isRepeaters: true,
+                    hangSeconds: (ex && typeof ex.hangSeconds === 'number' && ex.hangSeconds > 0) ? ex.hangSeconds : 7,
+                    repRestSeconds: (ex && typeof ex.repRestSeconds === 'number') ? ex.repRestSeconds : 3,
+                    repsPerSet: (ex && typeof ex.repsPerSet === 'number' && ex.repsPerSet > 0) ? ex.repsPerSet : 6,
+                    prepSeconds: (ex && typeof ex.prepSeconds === 'number') ? ex.prepSeconds : 5,
+                    setRestSeconds: (ex && typeof ex.restSeconds === 'number') ? ex.restSeconds : 150
+                };
+            }
+
+            if (isMaxHangs) {
+                return {
+                    isHang: true,
+                    isRepeaters: false,
+                    hangSeconds: (ex && typeof ex.hangSeconds === 'number' && ex.hangSeconds > 0) ? ex.hangSeconds : 10,
+                    repRestSeconds: 0,
+                    repsPerSet: 1,
+                    prepSeconds: (ex && typeof ex.prepSeconds === 'number') ? ex.prepSeconds : 5,
+                    setRestSeconds: (ex && typeof ex.restSeconds === 'number') ? ex.restSeconds : 180
+                };
+            }
+
+            return {
+                isHang: isHang,
+                isRepeaters: false,
+                hangSeconds: (ex && typeof ex.hangSeconds === 'number' && ex.hangSeconds > 0) ? ex.hangSeconds : 10,
+                repRestSeconds: (ex && typeof ex.repRestSeconds === 'number') ? ex.repRestSeconds : 0,
+                repsPerSet: (ex && typeof ex.repsPerSet === 'number' && ex.repsPerSet > 0) ? ex.repsPerSet : 1,
+                prepSeconds: (ex && typeof ex.prepSeconds === 'number') ? ex.prepSeconds : 5,
+                setRestSeconds: (ex && typeof ex.restSeconds === 'number') ? ex.restSeconds : 60
+            };
+        }
+        window.getExerciseHangConfig = getExerciseHangConfig;
+
         function initWorkoutPreset(preset) {
             if (!preset) return;
             // Check if already in sessionWorkouts
             let existing = sessionWorkouts.find(w => w.id === preset.id);
             if (existing) {
                 activeWorkoutPreset = existing;
+                // Reconcile missing or outdated properties from canonical preset
+                if (preset.hangConfig) {
+                    existing.hangConfig = { ...preset.hangConfig, ...(existing.hangConfig || {}) };
+                }
+                if (Array.isArray(existing.exercises) && Array.isArray(preset.exercises)) {
+                    preset.exercises.forEach((pEx, idx) => {
+                        if (existing.exercises[idx]) {
+                            const ex = existing.exercises[idx];
+                            const cfg = getExerciseHangConfig(preset, pEx);
+                            if (cfg.isHang) {
+                                ex.isHang = true;
+                                if (typeof ex.hangSeconds !== 'number' || ex.hangSeconds === 0) ex.hangSeconds = cfg.hangSeconds;
+                                if (typeof ex.repRestSeconds !== 'number') ex.repRestSeconds = cfg.repRestSeconds;
+                                if (typeof ex.repsPerSet !== 'number' || ex.repsPerSet === 0) ex.repsPerSet = cfg.repsPerSet;
+                                if (typeof ex.prepSeconds !== 'number' || ex.prepSeconds === 0) ex.prepSeconds = cfg.prepSeconds;
+                            }
+                        }
+                    });
+                }
             } else {
                 // Clean up any previous unstarted workout (0 completed sets) so orphaned empty presets do not linger
                 if (activeWorkoutPreset && activeWorkoutPreset.id !== preset.id) {
@@ -984,26 +1082,29 @@
                     durationMinutes: preset.durationMinutes,
                     desc: preset.desc,
                     hangConfig: preset.hangConfig ? { ...preset.hangConfig } : null,
-                    exercises: (preset.exercises || []).map(ex => ({
-                        id: ex.id,
-                        name: ex.name,
-                        sets: typeof ex.sets === 'number' ? ex.sets : 3,
-                        reps: ex.reps || '10 reps',
-                        restSeconds: ex.restSeconds || 60,
-                        desc: ex.desc || '',
-                        trackWeight: !!ex.trackWeight,
-                        isHang: !!ex.isHang || !!(preset.hangConfig && preset.hangConfig.isHang),
-                        hangSeconds: ex.hangSeconds !== undefined ? ex.hangSeconds : (preset.hangConfig ? preset.hangConfig.hangSeconds : 10),
-                        repRestSeconds: ex.repRestSeconds !== undefined ? ex.repRestSeconds : (preset.hangConfig ? preset.hangConfig.repRestSeconds : 0),
-                        repsPerSet: ex.repsPerSet !== undefined ? ex.repsPerSet : (preset.hangConfig ? preset.hangConfig.repsPerSet : 1),
-                        prepSeconds: ex.prepSeconds !== undefined ? ex.prepSeconds : (preset.hangConfig ? preset.hangConfig.prepSeconds : 5),
-                        defaultWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : (ex.trackWeight ? 60 : 0),
-                        defaultReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
-                        activeWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : (ex.trackWeight ? 60 : 0),
-                        activeReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
-                        completedSets: ex.completedSets || 0,
-                        setsData: ex.setsData ? [...ex.setsData] : []
-                    }))
+                    exercises: (preset.exercises || []).map(ex => {
+                        const cfg = getExerciseHangConfig(preset, ex);
+                        return {
+                            id: ex.id,
+                            name: ex.name,
+                            sets: typeof ex.sets === 'number' ? ex.sets : 3,
+                            reps: ex.reps || '10 reps',
+                            restSeconds: ex.restSeconds || (cfg.isHang ? cfg.setRestSeconds : 60),
+                            desc: ex.desc || '',
+                            trackWeight: !!ex.trackWeight,
+                            isHang: cfg.isHang,
+                            hangSeconds: ex.hangSeconds !== undefined ? ex.hangSeconds : cfg.hangSeconds,
+                            repRestSeconds: ex.repRestSeconds !== undefined ? ex.repRestSeconds : cfg.repRestSeconds,
+                            repsPerSet: ex.repsPerSet !== undefined ? ex.repsPerSet : cfg.repsPerSet,
+                            prepSeconds: ex.prepSeconds !== undefined ? ex.prepSeconds : cfg.prepSeconds,
+                            defaultWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : (ex.trackWeight ? 60 : 0),
+                            defaultReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
+                            activeWeight: ex.defaultWeight !== undefined ? ex.defaultWeight : (ex.trackWeight ? 60 : 0),
+                            activeReps: ex.defaultReps !== undefined ? ex.defaultReps : 6,
+                            completedSets: ex.completedSets || 0,
+                            setsData: ex.setsData ? [...ex.setsData] : []
+                        };
+                    })
                 };
                 sessionWorkouts.push(activeWorkoutPreset);
             }
@@ -1215,7 +1316,8 @@
 
             if (!activeWorkoutPreset) return;
             const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
-            const isRepeaters = activeWorkoutPreset.id === 'repeaters_7_3';
+            const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+            const isRepeaters = cfg.isRepeaters;
 
             if (setLabel) {
                 setLabel.innerText = isRepeaters 
@@ -1290,6 +1392,15 @@
             const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
             if (!currentEx) return;
 
+            // Safety: close rest timer overlay if open
+            if (typeof window.cancelRestTimer === 'function' && window.isRestTimerRunning && window.isRestTimerRunning()) {
+                window.cancelRestTimer();
+            }
+            const restOverlay = document.getElementById('restOverlay');
+            if (restOverlay) restOverlay.classList.replace('flex', 'hidden');
+            const restFin = document.getElementById('restOverlayFinished');
+            if (restFin) restFin.classList.replace('flex', 'hidden');
+
             const overlay = document.getElementById('hangTimerOverlay');
             if (overlay) {
                 overlay.classList.remove('hidden');
@@ -1300,8 +1411,9 @@
                 window.requestScreenWakeLock();
             }
 
-            const prepSecs = typeof currentEx.prepSeconds === 'number' ? currentEx.prepSeconds : 5;
-            hangTotalReps = currentEx.repsPerSet || 1;
+            const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+            const prepSecs = cfg.prepSeconds;
+            hangTotalReps = cfg.repsPerSet;
             hangCurrentRep = 1;
 
             transitionHangState('prep', prepSecs);
@@ -1359,8 +1471,9 @@
             const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
             if (!currentEx) return;
 
-            const hangSecs = currentEx.hangSeconds || 10;
-            const repRestSecs = currentEx.repRestSeconds || 3;
+            const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+            const hangSecs = cfg.hangSeconds;
+            const repRestSecs = cfg.repRestSeconds;
 
             if (hangTimerState === 'prep') {
                 // Transition from prep into hang
@@ -1401,7 +1514,8 @@
             const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
             if (!currentEx) return;
 
-            const setRestSecs = currentEx.restSeconds || 180;
+            const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+            const setRestSecs = cfg.setRestSeconds || currentEx.restSeconds || 150;
 
             if (typeof window.playIntervalBeep === 'function') window.playIntervalBeep('set_complete');
             if (typeof window.playHangVibration === 'function') window.playHangVibration('set_complete');
@@ -1413,8 +1527,8 @@
             currentEx.setsData[currentEx.completedSets - 1] = {
                 set: currentEx.completedSets,
                 weight: currentEx.trackWeight ? activeW : 0,
-                reps: currentEx.repsPerSet || 1,
-                hangSeconds: currentEx.hangSeconds || 10,
+                reps: cfg.repsPerSet,
+                hangSeconds: cfg.hangSeconds,
                 completed: true
             };
 
@@ -1425,16 +1539,47 @@
             // Stop hang timer & hide overlay
             stopHangTimer(false);
 
+            // If more hangs/sets exist in preset, advance to next
+            const hasMoreSets = activeWorkoutExIndex < activeWorkoutPreset.exercises.length - 1;
+            if (hasMoreSets) {
+                activeWorkoutExIndex++;
+            }
+            renderWorkoutHUD();
+
+            // Update rest overlay context and skip button before opening rest timer
+            const contextLabel = document.getElementById('restOverlayContextLabel');
+            const skipBtn = document.getElementById('restOverlaySkipToHangBtn');
+            const skipLabel = document.getElementById('restOverlaySkipToHangLabel');
+
+            if (hasMoreSets) {
+                const nextNum = activeWorkoutExIndex + 1;
+                const total = activeWorkoutPreset.exercises.length;
+                if (contextLabel) {
+                    contextLabel.innerText = cfg.isRepeaters 
+                        ? `Resting Before Set ${nextNum} of ${total}` 
+                        : `Resting Before Hang ${nextNum} of ${total}`;
+                }
+                if (skipBtn) {
+                    skipBtn.classList.remove('hidden');
+                }
+                if (skipLabel) {
+                    skipLabel.innerText = cfg.isRepeaters 
+                        ? `Skip Rest & Start Set ${nextNum}` 
+                        : `Skip Rest & Start Hang ${nextNum}`;
+                }
+            } else {
+                if (contextLabel) {
+                    contextLabel.innerText = 'All Sets Completed! Cool Down Rest';
+                }
+                if (skipBtn) {
+                    skipBtn.classList.add('hidden');
+                }
+            }
+
             // Auto-transition into set rest countdown
             if (typeof window.startRestTimer === 'function') {
                 window.startRestTimer(setRestSecs, true);
             }
-
-            // If more hangs/sets exist in preset, advance to next
-            if (activeWorkoutExIndex < activeWorkoutPreset.exercises.length - 1) {
-                activeWorkoutExIndex++;
-            }
-            renderWorkoutHUD();
         }
 
         function togglePauseHangTimer() {
@@ -1503,6 +1648,85 @@
             }
         });
         window.addEventListener('focus', syncHangTimerFromWallClock);
+
+        function skipRestAndStartNextHang() {
+            if (typeof window.cancelRestTimer === 'function') {
+                window.cancelRestTimer();
+            }
+            const overlay = document.getElementById('restOverlay');
+            if (overlay) {
+                overlay.classList.replace('flex', 'hidden');
+            }
+            const fin = document.getElementById('restOverlayFinished');
+            if (fin) {
+                fin.classList.replace('flex', 'hidden');
+            }
+            const skipBtn = document.getElementById('restOverlaySkipToHangBtn');
+            if (skipBtn) {
+                skipBtn.classList.add('hidden');
+            }
+            if ('vibrate' in navigator) navigator.vibrate([30, 50, 30]);
+            startHangTimer();
+        }
+        window.skipRestAndStartNextHang = skipRestAndStartNextHang;
+
+        function handleRestOverlayFinishedClick() {
+            const fin = document.getElementById('restOverlayFinished');
+            if (fin) fin.classList.replace('flex', 'hidden');
+            const overlay = document.getElementById('restOverlay');
+            if (overlay) overlay.classList.replace('flex', 'hidden');
+
+            const skipBtn = document.getElementById('restOverlaySkipToHangBtn');
+            if (skipBtn) skipBtn.classList.add('hidden');
+
+            // If this was a hangboard workout and there are more sets, start next hang timer
+            if (activeWorkoutPreset && activeWorkoutPreset.exercises) {
+                const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+                const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+                if (cfg.isHang && activeWorkoutExIndex < activeWorkoutPreset.exercises.length) {
+                    const isFinishedAll = (currentEx.completedSets || 0) >= (currentEx.sets || 1) && activeWorkoutExIndex === activeWorkoutPreset.exercises.length - 1;
+                    if (!isFinishedAll) {
+                        if ('vibrate' in navigator) navigator.vibrate([40, 60, 40]);
+                        startHangTimer();
+                        return;
+                    }
+                }
+            }
+        }
+        window.handleRestOverlayFinishedClick = handleRestOverlayFinishedClick;
+
+        function onRestTimerFinished() {
+            const title = document.getElementById('restFinishedTitle');
+            const skipBtn = document.getElementById('restOverlaySkipToHangBtn');
+            if (skipBtn) skipBtn.classList.add('hidden');
+
+            if (activeWorkoutPreset && activeWorkoutPreset.exercises) {
+                const currentEx = activeWorkoutPreset.exercises[activeWorkoutExIndex];
+                const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+                if (cfg.isHang) {
+                    const isLastEx = activeWorkoutExIndex >= activeWorkoutPreset.exercises.length - 1 && (currentEx.completedSets || 0) >= (currentEx.sets || 1);
+                    if (isLastEx) {
+                        if (title) {
+                            title.innerHTML = `WORKOUT<br><span class="text-3xl sm:text-4xl">COMPLETE! 🏆</span>`;
+                        }
+                    } else {
+                        const nextNum = activeWorkoutExIndex + 1;
+                        const totalSets = activeWorkoutPreset.exercises.length;
+                        const label = cfg.isRepeaters ? `SET ${nextNum}` : `HANG ${nextNum}`;
+                        if (title) {
+                            title.innerHTML = `<span class="text-sm uppercase tracking-widest text-black/70 font-black block mb-2">REST FINISHED!</span>TAP TO START<br><span class="text-4xl sm:text-5xl underline decoration-black decoration-4">${label} ▶</span><span class="text-xs uppercase tracking-widest text-black/70 font-bold block mt-3">(Set ${nextNum} of ${totalSets})</span>`;
+                        }
+                    }
+                    return;
+                }
+            }
+
+            // Default bouldering / general rest completion
+            if (title) {
+                title.innerHTML = 'GO<br>CLIMB!';
+            }
+        }
+        window.onRestTimerFinished = onRestTimerFinished;
 
         function renderWorkoutHUD() {
             if (!activeWorkoutPreset || !activeWorkoutPreset.exercises || activeWorkoutPreset.exercises.length === 0) return;
@@ -1584,29 +1808,30 @@
             // Hangboard Controller Handling
             const hangController = document.getElementById('workoutHangController');
             const setsPrompt = document.getElementById('workoutSetsPrompt');
-            const isHangWorkout = !!currentEx.isHang || (activeWorkoutPreset && activeWorkoutPreset.category === 'hangboard');
+            const cfg = getExerciseHangConfig(activeWorkoutPreset, currentEx);
+            const isHangWorkout = cfg.isHang;
             if (hangController) {
                 if (isHangWorkout) {
                     hangController.classList.remove('hidden');
                     hangController.classList.add('flex');
                     if (setsPrompt) setsPrompt.innerText = 'Or tap set to mark manually:';
 
-                    const isRepeaters = activeWorkoutPreset.id === 'repeaters_7_3';
+                    const isRepeaters = cfg.isRepeaters;
                     const startBtnLabel = document.getElementById('btnStartHangLabel');
                     const helperPrompt = document.getElementById('hangHelperPrompt');
                     const protocolBadge = document.getElementById('hangPresetProtocolBadge');
                     const durationRow = document.getElementById('hangDurationChipsRow');
 
-                    const hangSecs = currentEx.hangSeconds || 10;
+                    const hangSecs = currentEx.hangSeconds || cfg.hangSeconds;
 
                     if (isRepeaters) {
-                        if (startBtnLabel) startBtnLabel.innerText = `START SET ${activeWorkoutExIndex + 1} (6 × 7:3)`;
-                        if (helperPrompt) helperPrompt.innerText = '5s Prep → 6 × (7s Hang / 3s Shake) → Auto 2.5m Rest';
-                        if (protocolBadge) protocolBadge.innerText = '7s/3s × 6';
+                        if (startBtnLabel) startBtnLabel.innerText = `START SET ${activeWorkoutExIndex + 1} (${cfg.repsPerSet} × ${cfg.hangSeconds}:${cfg.repRestSeconds})`;
+                        if (helperPrompt) helperPrompt.innerText = `${cfg.prepSeconds}s Prep → ${cfg.repsPerSet} × (${cfg.hangSeconds}s Hang / ${cfg.repRestSeconds}s Shake) → Auto ${Math.round(cfg.setRestSeconds / 60 * 10) / 10}m Rest`;
+                        if (protocolBadge) protocolBadge.innerText = `${cfg.hangSeconds}s/${cfg.repRestSeconds}s × ${cfg.repsPerSet}`;
                         if (durationRow) durationRow.classList.add('hidden');
                     } else {
                         if (startBtnLabel) startBtnLabel.innerText = `START HANG ${activeWorkoutExIndex + 1} (${hangSecs}s)`;
-                        if (helperPrompt) helperPrompt.innerText = `5s Prep Chime → ${hangSecs}s Hang → Release Buzzer`;
+                        if (helperPrompt) helperPrompt.innerText = `${cfg.prepSeconds}s Prep Chime → ${hangSecs}s Hang → Release Buzzer`;
                         if (protocolBadge) protocolBadge.innerText = `${hangSecs}s @ Max`;
                         if (durationRow) durationRow.classList.remove('hidden');
 

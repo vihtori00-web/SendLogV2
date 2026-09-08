@@ -1724,6 +1724,9 @@
                     if (DOM.overlayMain && !DOM.overlayMain.classList.contains('hidden') && DOM.overlayFinished) {
                         DOM.overlayFinished.classList.replace('hidden', 'flex');
                     }
+                    if (typeof window.onRestTimerFinished === 'function') {
+                        window.onRestTimerFinished();
+                    }
                 }
                 updateRestTimerDisplay();
                 if (typeof window.onRestTimerTick === 'function') {
@@ -1742,6 +1745,13 @@
             }
             releaseScreenWakeLock();
             if (DOM.overlayMain) DOM.overlayMain.classList.replace('flex', 'hidden');
+            if (DOM.overlayFinished) DOM.overlayFinished.classList.replace('flex', 'hidden');
+            const skipBtn = document.getElementById('restOverlaySkipToHangBtn');
+            if (skipBtn) skipBtn.classList.add('hidden');
+            const ctxLabel = document.getElementById('restOverlayContextLabel');
+            if (ctxLabel) ctxLabel.innerText = 'Rest Interval';
+            const finTitle = document.getElementById('restFinishedTitle');
+            if (finTitle) finTitle.innerHTML = 'GO<br>CLIMB!';
             updateRestTimerDisplay();
             if (typeof window.onRestTimerTick === 'function') {
                 window.onRestTimerTick(defaultRestSeconds, false, defaultRestSeconds);
@@ -1761,6 +1771,9 @@
                     playDing();
                     if (DOM.overlayMain && !DOM.overlayMain.classList.contains('hidden') && DOM.overlayFinished) {
                         DOM.overlayFinished.classList.replace('hidden', 'flex');
+                    }
+                    if (typeof window.onRestTimerFinished === 'function') {
+                        window.onRestTimerFinished();
                     }
                 }
                 updateRestTimerDisplay();
