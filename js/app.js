@@ -64,7 +64,42 @@
             '8A', '8A+', '8B', '8B+', '8C', '8C+', '9A'
         ];
 
-        let maxGradeIndex = parseInt(localStorage.getItem('boulderMaxGradeIndex')) || 14;
+        function resolveMaxGradeIndex(history) {
+            const stored = localStorage.getItem('boulderMaxGradeIndex');
+            let highestSendIdx = -1;
+            if (Array.isArray(history)) {
+                for (const session of history) {
+                    if (!session || !Array.isArray(session.climbs)) continue;
+                    for (const climb of session.climbs) {
+                        if (climb.statusText === 'Top' || climb.statusText === 'Flash' || climb.isTop || climb.isFlash) {
+                            const idx = fontGrades.indexOf(climb.gradeStr);
+                            if (idx > highestSendIdx) {
+                                highestSendIdx = idx;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (stored !== null && stored !== undefined && stored !== '') {
+                const parsed = parseInt(stored, 10);
+                if (!isNaN(parsed) && parsed >= 0 && parsed < fontGrades.length) {
+                    if (parsed === 14 && highestSendIdx >= 0 && highestSendIdx < 14) {
+                        return highestSendIdx;
+                    }
+                    return parsed;
+                }
+            }
+
+            if (highestSendIdx >= 0) {
+                return highestSendIdx;
+            }
+
+            return 7; // Default 6B
+        }
+
+        let boulderHistory = JSON.parse(localStorage.getItem('boulderHistory')) || [];
+        let maxGradeIndex = resolveMaxGradeIndex(boulderHistory);
         let currentGradeIndex = maxGradeIndex;
         let tries = 1;
         let burnsRecorded = 0;
@@ -74,7 +109,6 @@
         let sessionClimbs = [];
         let climbIdCounter = 0;
         let selectedTags = [];
-        let boulderHistory = JSON.parse(localStorage.getItem('boulderHistory')) || [];
         window.historyViewMode = 'ALL';
         var historyViewMode = 'ALL';
         
@@ -1163,12 +1197,15 @@
             }
 
             if (!coachPlan || !coachPlan.phases || coachPlan.phases.length === 0) {
+                const warmupIdx = Math.max(0, maxGradeIndex - 6);
+                const midIdx = Math.max(0, maxGradeIndex - 4);
+                const coolIdx = Math.max(0, maxGradeIndex - 8);
                 coachPlan = {
                     title: "🧗 Daily Climbing Session",
                     phases: [
-                        { name: "Warmup (20m)", title: "Warmup", desc: "Build gradually across 4 easy boulders.", durationMinutes: 20, restSeconds: 60, targetGradeIdx: Math.max(0, maxGradeIndex - 3), targetGradeStr: fontGrades[Math.max(0, maxGradeIndex - 3)], targetTags: ['slab', 'sloper'] },
-                        { name: "Main Phase (45m)", title: "Main Phase", desc: "Work moderate problems with good form.", durationMinutes: 45, restSeconds: 120, targetGradeIdx: Math.max(0, maxGradeIndex - 1), targetGradeStr: fontGrades[Math.max(0, maxGradeIndex - 1)], targetTags: ['powerful', 'crimp'] },
-                        { name: "Cool Down (10m)", title: "Cool Down", desc: "2 easy movement slabs.", durationMinutes: 10, restSeconds: 60, targetGradeIdx: Math.max(0, maxGradeIndex - 4), targetGradeStr: fontGrades[Math.max(0, maxGradeIndex - 4)], targetTags: ['slab'] }
+                        { name: "Warmup (20m)", title: "Warmup", desc: `Build gradually from ${fontGrades[warmupIdx]} to ${fontGrades[midIdx]}.`, durationMinutes: 20, restSeconds: 60, targetGradeIdx: warmupIdx, targetGradeStr: fontGrades[warmupIdx], targetTags: ['slab', 'sloper'] },
+                        { name: "Main Phase (45m)", title: "Main Phase", desc: `Work target problems at ${fontGrades[maxGradeIndex]}.`, durationMinutes: 45, restSeconds: 150, targetGradeIdx: maxGradeIndex, targetGradeStr: fontGrades[maxGradeIndex], targetTags: ['powerful', 'crimp'] },
+                        { name: "Cool Down (10m)", title: "Cool Down", desc: `2 easy movement slabs at ${fontGrades[coolIdx]} or below.`, durationMinutes: 10, restSeconds: 60, targetGradeIdx: coolIdx, targetGradeStr: fontGrades[coolIdx], targetTags: ['slab'] }
                     ]
                 };
             }

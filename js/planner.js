@@ -338,17 +338,22 @@ const Planner = (function () {
         const gradeReadiness = computeGradeReadiness(history, maxGradeIdx);
         const checkin = preSessionCheckin;
 
-        const warmupBaseIdx = Math.max(0, maxGradeIdx - 4);
-        const volumeGradeIdx = Math.max(0, maxGradeIdx - 2);
-        const subMaxGradeIdx = Math.max(0, maxGradeIdx - 1);
+        const warmupEntryIdx = Math.max(0, maxGradeIdx - 6);
+        const warmupMidIdx = Math.max(0, maxGradeIdx - 4);
+        const warmupPeakIdx = Math.max(0, maxGradeIdx - 3);
+        const cnsPrimeIdx = Math.max(0, maxGradeIdx - 2);
         const projectTargetIdx = gradeReadiness.readyForBreakthrough ? Math.min(GRADES.length - 1, maxGradeIdx + 1) : maxGradeIdx;
+        const volumeCircuitIdx = Math.max(0, maxGradeIdx - 3);
+        const coolDownIdx = Math.max(0, maxGradeIdx - 8);
 
-        const maxGradeStr = GRADES[maxGradeIdx] || '6C';
-        const subMaxGradeStr = GRADES[subMaxGradeIdx];
-        const volumeGradeStr = GRADES[volumeGradeIdx];
-        const warmupBaseStr = GRADES[warmupBaseIdx];
-        const nextGradeStr = GRADES[Math.min(GRADES.length - 1, maxGradeIdx + 1)];
+        const maxGradeStr = GRADES[maxGradeIdx] || '6B';
+        const warmupEntryStr = GRADES[warmupEntryIdx];
+        const warmupMidStr = GRADES[warmupMidIdx];
+        const warmupPeakStr = GRADES[warmupPeakIdx];
+        const cnsPrimeStr = GRADES[cnsPrimeIdx];
+        const volumeCircuitStr = GRADES[volumeCircuitIdx];
         const projectTargetStr = GRADES[projectTargetIdx];
+        const coolDownStr = GRADES[coolDownIdx];
 
         let baseReadiness = 85;
         if (workload.statusCategory === 'high_risk') baseReadiness = 30;
@@ -360,7 +365,7 @@ const Planner = (function () {
         else if (tendon.recoveryPct < 100) baseReadiness -= 15;
 
         if (checkin.fingers === 'tweaky') baseReadiness = Math.min(baseReadiness, 40);
-        else if (checkin.fingers === 'stiff') baseReadiness -= 10;
+        else if (checkin.fingers === 'stiff') baseReadiness = Math.min(baseReadiness, 60);
         if (checkin.skin === 'split') baseReadiness -= 15;
 
         const compositeScore = Math.max(10, Math.min(99, baseReadiness));
@@ -418,7 +423,9 @@ const Planner = (function () {
             mode = 'VOLUME';
             title = '🧗 Sub-Max Volume & Capacity';
             badgeColor = 'amber';
-            rationale = tendon.recoveryPct < 80
+            rationale = checkin.fingers === 'stiff'
+                ? 'Stiff fingers reported. Protecting pulleys with open-hand volume, slopers, and movement flow.'
+                : tendon.recoveryPct < 80
                 ? `Tendons still remodeling from recent ${tendon.heavyTags.join('/')} loading (${tendon.hoursElapsed}h elapsed). Protect pulleys with open-hand & compression.`
                 : 'Elevated acute load. Build base endurance and movement flow without testing limits.';
             targetTags = ['slab', 'sloper', 'technical', 'pinch'];
@@ -427,31 +434,35 @@ const Planner = (function () {
                 {
                     name: 'Warmup (20m)',
                     title: 'Movement Warmup',
-                    desc: `Build gradually from ${warmupBaseStr} to ${volumeGradeStr}. Focus on silent feet and precision.`,
+                    desc: warmupEntryIdx < warmupMidIdx 
+                        ? `Build gradually from ${warmupEntryStr} to ${warmupMidStr}. Focus on silent feet and precision.`
+                        : `Warm up easily on ${warmupEntryStr}. Focus on silent feet and precision.`,
                     durationMinutes: 20,
                     restSeconds: 60,
-                    targetGradeIdx: warmupBaseIdx,
-                    targetGradeStr: warmupBaseStr,
+                    targetGradeIdx: warmupEntryIdx,
+                    targetGradeStr: warmupEntryStr,
                     targetTags: ['slab', 'sloper']
                 },
                 {
                     name: 'Volume Circuit (45m)',
                     title: 'Volume Circuit',
-                    desc: `Complete 8–12 boulders strictly at ${volumeGradeStr} and ${subMaxGradeStr}. Rest 2 min between sends.`,
+                    desc: warmupMidIdx < volumeCircuitIdx
+                        ? `Complete 8–12 boulders strictly between ${warmupMidStr} and ${volumeCircuitStr}. Rest 2 min between sends.`
+                        : `Complete 8–12 boulders strictly at ${volumeCircuitStr}. Rest 2 min between sends.`,
                     durationMinutes: 45,
                     restSeconds: 120,
-                    targetGradeIdx: volumeGradeIdx,
-                    targetGradeStr: volumeGradeStr,
+                    targetGradeIdx: volumeCircuitIdx,
+                    targetGradeStr: volumeCircuitStr,
                     targetTags: ['sloper', 'pinch', 'technical']
                 },
                 {
                     name: 'Technical Drill (15m)',
                     title: 'Technical Drill',
-                    desc: 'Practice 3 slab or dynamic balance boulders with zero re-gripping.',
+                    desc: `Practice 3 slab or dynamic balance boulders at ${warmupMidStr} with zero re-gripping.`,
                     durationMinutes: 15,
                     restSeconds: 90,
-                    targetGradeIdx: subMaxGradeIdx,
-                    targetGradeStr: subMaxGradeStr,
+                    targetGradeIdx: warmupMidIdx,
+                    targetGradeStr: warmupMidStr,
                     targetTags: ['slab', 'technical']
                 }
             ];
@@ -465,31 +476,35 @@ const Planner = (function () {
                 {
                     name: 'Dynamic Warmup (10m)',
                     title: 'Dynamic Warmup',
-                    desc: `Continuous easy movement on ${warmupBaseStr} to 5+.`,
+                    desc: warmupEntryIdx < warmupMidIdx
+                        ? `Continuous easy movement from ${warmupEntryStr} to ${warmupMidStr}.`
+                        : `Continuous easy movement on ${warmupEntryStr}.`,
                     durationMinutes: 10,
                     restSeconds: 60,
-                    targetGradeIdx: warmupBaseIdx,
-                    targetGradeStr: warmupBaseStr,
+                    targetGradeIdx: warmupEntryIdx,
+                    targetGradeStr: warmupEntryStr,
                     targetTags: ['dynamic']
                 },
                 {
                     name: 'Flash Ladder (25m)',
                     title: 'Flash Ladder',
-                    desc: `Attempt 5-6 boulders at ${volumeGradeStr} to ${subMaxGradeStr} with 90s rest.`,
+                    desc: warmupMidIdx < warmupPeakIdx
+                        ? `Attempt 4–5 boulders from ${warmupMidStr} to ${warmupPeakStr} with 90s rest.`
+                        : `Attempt 4–5 boulders at ${warmupPeakStr} with 90s rest.`,
                     durationMinutes: 25,
                     restSeconds: 90,
-                    targetGradeIdx: volumeGradeIdx,
-                    targetGradeStr: volumeGradeStr,
+                    targetGradeIdx: warmupPeakIdx,
+                    targetGradeStr: warmupPeakStr,
                     targetTags: ['powerful', 'dynamic']
                 },
                 {
                     name: 'Power Burn (10m)',
                     title: 'Power Burn',
-                    desc: `2 crisp burns on a familiar ${maxGradeStr}.`,
+                    desc: `2 crisp burns on ${cnsPrimeStr}.`,
                     durationMinutes: 10,
                     restSeconds: 180,
-                    targetGradeIdx: maxGradeIdx,
-                    targetGradeStr: maxGradeStr,
+                    targetGradeIdx: cnsPrimeIdx,
+                    targetGradeStr: cnsPrimeStr,
                     targetTags: ['powerful', 'crimp']
                 }
             ];
@@ -504,21 +519,23 @@ const Planner = (function () {
                 {
                     name: 'Warmup Pyramid (25m)',
                     title: 'Warmup Pyramid',
-                    desc: `1x ${warmupBaseStr}, 2x ${volumeGradeStr}, 1x ${subMaxGradeStr}. Full 3m rest after last warmup.`,
+                    desc: warmupEntryIdx < warmupMidIdx && warmupMidIdx < warmupPeakIdx
+                        ? `1x ${warmupEntryStr}, 2x ${warmupMidStr}, 1x ${warmupPeakStr}. Full 3m rest after last warmup.`
+                        : `Build gradually: 2x ${warmupEntryStr}, 2x ${warmupPeakStr}. Full 3m rest after last warmup.`,
                     durationMinutes: 25,
                     restSeconds: 90,
-                    targetGradeIdx: warmupBaseIdx,
-                    targetGradeStr: warmupBaseStr,
+                    targetGradeIdx: warmupEntryIdx,
+                    targetGradeStr: warmupEntryStr,
                     targetTags: ['slab', 'sloper']
                 },
                 {
                     name: 'CNS Priming (10m)',
                     title: 'CNS Priming',
-                    desc: `1 high-effort flash attempt on ${subMaxGradeStr} to activate recruitment.`,
+                    desc: `1 high-effort flash attempt on ${cnsPrimeStr} to activate recruitment.`,
                     durationMinutes: 10,
                     restSeconds: 120,
-                    targetGradeIdx: subMaxGradeIdx,
-                    targetGradeStr: subMaxGradeStr,
+                    targetGradeIdx: cnsPrimeIdx,
+                    targetGradeStr: cnsPrimeStr,
                     targetTags: ['powerful', 'crimp']
                 },
                 {
@@ -534,11 +551,11 @@ const Planner = (function () {
                 {
                     name: 'Cool Down (10m)',
                     title: 'Cool Down',
-                    desc: '2 very easy slabs below 5+ and light antagonist stretching.',
+                    desc: `2 very easy slabs at ${coolDownStr} or below and light antagonist stretching.`,
                     durationMinutes: 10,
                     restSeconds: 60,
-                    targetGradeIdx: warmupBaseIdx,
-                    targetGradeStr: warmupBaseStr,
+                    targetGradeIdx: coolDownIdx,
+                    targetGradeStr: coolDownStr,
                     targetTags: ['slab', 'sloper']
                 }
             ];
@@ -863,15 +880,52 @@ const Planner = (function () {
         return { ...preSessionCheckin };
     }
 
+    function resolveMaxGradeIdx(history) {
+        const stored = localStorage.getItem('boulderMaxGradeIndex');
+        let highestSendIdx = -1;
+        if (Array.isArray(history)) {
+            for (const session of history) {
+                if (!session || !Array.isArray(session.climbs)) continue;
+                for (const climb of session.climbs) {
+                    if (climb.statusText === 'Top' || climb.statusText === 'Flash' || climb.isTop || climb.isFlash) {
+                        const idx = GRADES.indexOf(climb.gradeStr);
+                        if (idx > highestSendIdx) {
+                            highestSendIdx = idx;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (stored !== null && stored !== undefined && stored !== '') {
+            const parsed = parseInt(stored, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed < GRADES.length) {
+                // If stored is 14 (the old default fallback 7B+) but user has never sent 14,
+                // fall back to user's highest logged send if available
+                if (parsed === 14 && highestSendIdx >= 0 && highestSendIdx < 14) {
+                    return highestSendIdx;
+                }
+                return parsed;
+            }
+        }
+
+        if (highestSendIdx >= 0) {
+            return highestSendIdx;
+        }
+
+        return 7; // Default 6B
+    }
+
     function getTodayPlan() {
         const history = JSON.parse(localStorage.getItem('boulderHistory')) || [];
-        const maxGradeIdx = parseInt(localStorage.getItem('boulderMaxGradeIndex')) || 14;
+        const maxGradeIdx = resolveMaxGradeIdx(history);
         return generateDailyPlan(history, maxGradeIdx);
     }
 
     return {
         GRADES,
         STYLE_STRESS,
+        resolveMaxGradeIdx,
         calculateSessionLoad,
         computeWorkloadMetrics,
         computeTendonRecovery,
@@ -890,7 +944,7 @@ const Planner = (function () {
 function renderPlannerUI() {
     try {
         const history = JSON.parse(localStorage.getItem('boulderHistory')) || [];
-        const maxGradeIdx = parseInt(localStorage.getItem('boulderMaxGradeIndex')) || 14;
+        const maxGradeIdx = Planner.resolveMaxGradeIdx(history);
         const plan = Planner.generateDailyPlan(history, maxGradeIdx);
         const checkin = Planner.getCheckin();
 
