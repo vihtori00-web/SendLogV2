@@ -746,8 +746,13 @@
             }
 
             // Automatically trigger coach rest timer when resting between burns
-            if (trainingActive && !coachRestTimerInterval) {
-                toggleCoachRestTimer();
+            if (trainingActive) {
+                const isRunning = typeof window.isRestTimerRunning === 'function'
+                    ? window.isRestTimerRunning()
+                    : (coachRestTimerInterval !== null);
+                if (!isRunning) {
+                    toggleCoachRestTimer();
+                }
             }
 
             updateUI();
@@ -1176,9 +1181,17 @@
                 advanceCoachedPhase();
             } else if (action === 'add_rest') {
                 if ('vibrate' in navigator) navigator.vibrate(20);
-                coachRestRemaining = (coachRestRemaining || 0) + (restSeconds || 120);
-                updateCoachRestTimerDisplay();
-                if (!coachRestTimerInterval) toggleCoachRestTimer();
+                if (typeof window.adjRestTimer === 'function') {
+                    window.adjRestTimer(restSeconds || 60);
+                    const overlay = document.getElementById('restOverlay');
+                    if (overlay && overlay.classList.contains('hidden')) {
+                        overlay.classList.replace('hidden', 'flex');
+                    }
+                } else {
+                    coachRestRemaining = (coachRestRemaining || 0) + (restSeconds || 60);
+                    updateCoachRestTimerDisplay();
+                    if (!coachRestTimerInterval) toggleCoachRestTimer();
+                }
             }
         }
 
@@ -1246,14 +1259,21 @@
                 renderTags();
             }
 
-            // Reset rest timer for this phase
+            // Configure built-in rest timer for this phase
+            const phaseRest = phase.restSeconds || 120;
+            coachRestRemaining = phaseRest;
+            if (typeof window.setDefaultRestSeconds === 'function') {
+                window.setDefaultRestSeconds(phaseRest);
+            }
+            if (typeof window.cancelRestTimer === 'function' && typeof window.isRestTimerRunning === 'function' && window.isRestTimerRunning()) {
+                window.cancelRestTimer();
+            }
             if (coachRestTimerInterval) {
                 clearInterval(coachRestTimerInterval);
                 coachRestTimerInterval = null;
             }
-            coachRestRemaining = phase.restSeconds || 120;
-            updateCoachRestTimerDisplay();
 
+            updateCoachRestTimerDisplay(phaseRest, false, phaseRest);
             checkIntraSessionAdaptation();
         }
 
@@ -1271,6 +1291,9 @@
         function advanceCoachedPhase() {
             if (!trainingActive || !coachPlan || !coachPlan.phases) return;
 
+            if (typeof window.cancelRestTimer === 'function') {
+                window.cancelRestTimer();
+            }
             if (coachRestTimerInterval) {
                 clearInterval(coachRestTimerInterval);
                 coachRestTimerInterval = null;
@@ -1312,56 +1335,66 @@
         function toggleCoachRestTimer() {
             if ('vibrate' in navigator) navigator.vibrate(20);
 
-            if (coachRestTimerInterval) {
-                // Pause/reset timer
-                clearInterval(coachRestTimerInterval);
-                coachRestTimerInterval = null;
-                const phase = coachPlan?.phases?.[coachPhaseIndex];
-                coachRestRemaining = phase?.restSeconds || 120;
-                updateCoachRestTimerDisplay();
+            const isRunning = typeof window.isRestTimerRunning === 'function'
+                ? window.isRestTimerRunning()
+                : (coachRestTimerInterval !== null);
+
+            if (isRunning) {
+                // If the timer is already running, tapping toggles the fullscreen rest overlay
+                const overlay = document.getElementById('restOverlay');
+                if (overlay) {
+                    if (overlay.classList.contains('hidden')) {
+                        overlay.classList.replace('hidden', 'flex');
+                    } else {
+                        overlay.classList.replace('flex', 'hidden');
+                    }
+                }
                 return;
             }
 
-            // Start rest timer
+            // Start rest timer using the app's built-in wall-clock timer
             const phase = coachPlan?.phases?.[coachPhaseIndex];
-            if (!coachRestRemaining || coachRestRemaining <= 0) {
-                coachRestRemaining = phase?.restSeconds || 120;
-            }
+            const targetSecs = phase?.restSeconds || (typeof window.getDefaultRestSeconds === 'function' ? window.getDefaultRestSeconds() : 120);
 
-            coachRestTimerInterval = setInterval(() => {
-                coachRestRemaining--;
-                updateCoachRestTimerDisplay();
-
-                if (coachRestRemaining === 5 && 'vibrate' in navigator) {
-                    navigator.vibrate([80, 80, 80]);
-                }
-
-                if (coachRestRemaining <= 0) {
-                    clearInterval(coachRestTimerInterval);
-                    coachRestTimerInterval = null;
-                    if ('vibrate' in navigator) navigator.vibrate([400, 150, 400]);
-                    const label = document.getElementById('coachRestTimerLabel');
-                    if (label) label.innerText = "Rest Done! 🧗";
-                    setTimeout(() => {
-                        const currentP = coachPlan?.phases?.[coachPhaseIndex];
-                        coachRestRemaining = currentP?.restSeconds || 120;
+            if (typeof window.startRestTimer === 'function') {
+                window.startRestTimer(targetSecs, true);
+            } else {
+                // Fallback
+                coachRestRemaining = targetSecs;
+                coachRestTimerInterval = setInterval(() => {
+                    coachRestRemaining--;
+                    updateCoachRestTimerDisplay();
+                    if (coachRestRemaining <= 0) {
+                        clearInterval(coachRestTimerInterval);
+                        coachRestTimerInterval = null;
                         updateCoachRestTimerDisplay();
-                    }, 2500);
-                }
-            }, 1000);
-            updateCoachRestTimerDisplay();
+                    }
+                }, 1000);
+                updateCoachRestTimerDisplay();
+            }
         }
 
-        function updateCoachRestTimerDisplay() {
+        function updateCoachRestTimerDisplay(rem, running, defaultSecs) {
             const label = document.getElementById('coachRestTimerLabel');
             const icon = document.getElementById('coachRestTimerIcon');
             const btn = document.getElementById('coachRestTimerBtn');
             if (!label) return;
 
-            const m = Math.floor(coachRestRemaining / 60);
-            const s = (coachRestRemaining % 60).toString().padStart(2, '0');
+            const isRunning = typeof running === 'boolean'
+                ? running
+                : (typeof window.isRestTimerRunning === 'function' ? window.isRestTimerRunning() : (coachRestTimerInterval !== null));
 
-            if (coachRestTimerInterval) {
+            const phase = coachPlan?.phases?.[coachPhaseIndex];
+            const phaseRest = phase?.restSeconds || defaultSecs || (typeof window.getDefaultRestSeconds === 'function' ? window.getDefaultRestSeconds() : 120);
+
+            const secs = isRunning
+                ? (typeof rem === 'number' ? rem : (typeof window.getRestTimerRemaining === 'function' ? window.getRestTimerRemaining() : coachRestRemaining))
+                : phaseRest;
+
+            const m = Math.floor(Math.max(0, secs) / 60);
+            const s = (Math.max(0, secs) % 60).toString().padStart(2, '0');
+
+            if (isRunning) {
                 label.innerText = `${m}:${s}`;
                 if (btn) {
                     btn.classList.add('bg-emerald-600/30', 'border-emerald-500/50', 'text-emerald-400');
@@ -1378,6 +1411,12 @@
             }
         }
 
+        // Global callback connection for chart.js rest timer
+        window.onRestTimerTick = (rem, running, defaultSecs) => {
+            coachRestRemaining = rem;
+            updateCoachRestTimerDisplay(rem, running, defaultSecs);
+        };
+
         function forfeitTraining() {
             if (confirm("End today's guided coach workout? You can continue free logging!")) {
                 endTraining();
@@ -1387,6 +1426,9 @@
         function endTraining() {
             if ('vibrate' in navigator) navigator.vibrate(30);
 
+            if (typeof window.cancelRestTimer === 'function') {
+                window.cancelRestTimer();
+            }
             if (coachRestTimerInterval) {
                 clearInterval(coachRestTimerInterval);
                 coachRestTimerInterval = null;
@@ -1755,6 +1797,21 @@
                 if(el) tabObserver.observe(el);
             });
         }, 100);
+
+        // Screen-dark / background recovery listener for session & coach timers
+        function syncAppTimersFromWallClock() {
+            if (sessionStartTime) updateSessionTimer();
+            if (typeof window.getRestTimerRemaining === 'function' && typeof window.isRestTimerRunning === 'function') {
+                updateCoachRestTimerDisplay(window.getRestTimerRemaining(), window.isRestTimerRunning());
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                syncAppTimersFromWallClock();
+            }
+        });
+        window.addEventListener('focus', syncAppTimersFromWallClock);
 
         function bootApp() {
             try {

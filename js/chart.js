@@ -1160,6 +1160,25 @@
         let defaultRestSeconds = 120;
         let restTimeRemaining = 0;
         let restTimerTargetEpoch = 0;
+        let screenWakeLock = null;
+
+        async function requestScreenWakeLock() {
+            try {
+                if ('wakeLock' in navigator && !screenWakeLock) {
+                    screenWakeLock = await navigator.wakeLock.request('screen');
+                    screenWakeLock.addEventListener('release', () => {
+                        screenWakeLock = null;
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function releaseScreenWakeLock() {
+            if (screenWakeLock) {
+                screenWakeLock.release().catch(() => {});
+                screenWakeLock = null;
+            }
+        }
 
         function formatTimerDisplay(secs) {
             const m = Math.floor(secs / 60);
@@ -1175,6 +1194,9 @@
                 defaultRestSeconds = Math.max(30, Math.min(900, defaultRestSeconds + delta));
             }
             updateRestTimerDisplay();
+            if (typeof window.onRestTimerTick === 'function') {
+                window.onRestTimerTick(restTimerInterval ? restTimeRemaining : defaultRestSeconds, restTimerInterval !== null, defaultRestSeconds);
+            }
             
             // Secondary effects offloaded
             if ('vibrate' in navigator) navigator.vibrate(10);
@@ -1208,25 +1230,35 @@
             }
         }
 
-        function startRestTimer() {
-            if (DOM.overlayMain) {
+        function startRestTimer(customSeconds, showOverlay = true) {
+            if (typeof customSeconds === 'number' && customSeconds > 0) {
+                defaultRestSeconds = customSeconds;
+            }
+
+            if (showOverlay && DOM.overlayMain) {
                 DOM.overlayMain.classList.replace('hidden', 'flex');
                 if (DOM.overlayFinished) DOM.overlayFinished.classList.replace('flex', 'hidden');
             }
 
-            if (restTimerInterval) return;
+            if (restTimerInterval) {
+                clearInterval(restTimerInterval);
+                restTimerInterval = null;
+            }
 
             restTimeRemaining = defaultRestSeconds;
             restTimerTargetEpoch = Date.now() + (defaultRestSeconds * 1000);
 
+            requestScreenWakeLock();
+
             if ('vibrate' in navigator) navigator.vibrate(20);
             setTimeout(initAudio, 0);
 
-            restTimerInterval = setInterval(() => {
-                restTimeRemaining = Math.ceil((restTimerTargetEpoch - Date.now()) / 1000);
+            const handleTick = () => {
+                restTimeRemaining = Math.max(0, Math.ceil((restTimerTargetEpoch - Date.now()) / 1000));
                 if (restTimeRemaining <= 0) {
                     clearInterval(restTimerInterval);
                     restTimerInterval = null;
+                    releaseScreenWakeLock();
                     
                     if (DOM.timerPulse) DOM.timerPulse.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
                     if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
@@ -1237,8 +1269,13 @@
                     }
                 }
                 updateRestTimerDisplay();
-            }, 1000);
-            updateRestTimerDisplay();
+                if (typeof window.onRestTimerTick === 'function') {
+                    window.onRestTimerTick(restTimeRemaining, restTimerInterval !== null, defaultRestSeconds);
+                }
+            };
+
+            restTimerInterval = setInterval(handleTick, 1000);
+            handleTick();
         }
 
         function cancelRestTimer() {
@@ -1246,9 +1283,52 @@
                 clearInterval(restTimerInterval);
                 restTimerInterval = null;
             }
+            releaseScreenWakeLock();
             if (DOM.overlayMain) DOM.overlayMain.classList.replace('flex', 'hidden');
             updateRestTimerDisplay();
+            if (typeof window.onRestTimerTick === 'function') {
+                window.onRestTimerTick(defaultRestSeconds, false, defaultRestSeconds);
+            }
         }
+
+        // Screen-dark / background recovery listener
+        function syncRestTimerFromWallClock() {
+            if (restTimerInterval) {
+                restTimeRemaining = Math.max(0, Math.ceil((restTimerTargetEpoch - Date.now()) / 1000));
+                if (restTimeRemaining <= 0) {
+                    clearInterval(restTimerInterval);
+                    restTimerInterval = null;
+                    releaseScreenWakeLock();
+                    if (DOM.timerPulse) DOM.timerPulse.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+                    if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+                    playDing();
+                    if (DOM.overlayMain && !DOM.overlayMain.classList.contains('hidden') && DOM.overlayFinished) {
+                        DOM.overlayFinished.classList.replace('hidden', 'flex');
+                    }
+                }
+                updateRestTimerDisplay();
+                if (typeof window.onRestTimerTick === 'function') {
+                    window.onRestTimerTick(restTimeRemaining, restTimerInterval !== null, defaultRestSeconds);
+                }
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                syncRestTimerFromWallClock();
+                if (restTimerInterval) requestScreenWakeLock();
+            }
+        });
+        window.addEventListener('focus', syncRestTimerFromWallClock);
+
+        // Expose functions globally for app.js and index.html
+        window.startRestTimer = startRestTimer;
+        window.cancelRestTimer = cancelRestTimer;
+        window.adjRestTimer = adjRestTimer;
+        window.isRestTimerRunning = () => restTimerInterval !== null;
+        window.getRestTimerRemaining = () => restTimerInterval ? restTimeRemaining : defaultRestSeconds;
+        window.getDefaultRestSeconds = () => defaultRestSeconds;
+        window.setDefaultRestSeconds = (secs) => { if (secs > 0) defaultRestSeconds = secs; updateRestTimerDisplay(); };
 
 
 
