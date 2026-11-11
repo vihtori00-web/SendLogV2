@@ -226,7 +226,8 @@ const Planner = (function () {
             climb.isTop ||
             climb.isFlash ||
             climb.statusText === 'Top' ||
-            climb.statusText === 'Flash'
+            climb.statusText === 'Flash' ||
+            climb.completionPct === 100
         );
     }
 
@@ -238,26 +239,11 @@ const Planner = (function () {
     // Normalize session climbs so index 0 = oldest, index length-1 = most recent
     function normalizeChronological(climbs = []) {
         if (!Array.isArray(climbs) || climbs.length <= 1) return [...(climbs || [])];
-        const copy = [...climbs];
-
-        // 1. If timestamps or numeric IDs exist, sort ascending
-        const firstTs = copy[0].timestamp || copy[0].createdAt || copy[0].id;
-        const lastTs = copy[copy.length - 1].timestamp || copy[copy.length - 1].createdAt || copy[copy.length - 1].id;
-        if (typeof firstTs === 'number' && typeof lastTs === 'number' && firstTs !== lastTs) {
-            return copy.sort((a, b) => {
-                const tA = a.timestamp || a.createdAt || a.id || 0;
-                const tB = b.timestamp || b.createdAt || b.id || 0;
-                return tA - tB;
-            });
-        }
-
-        // 2. Heuristic fallback: if index 0 is much harder than the last index, UI is unshifting (newest-first)
-        const firstGrade = GRADES.indexOf(copy[0].gradeStr);
-        const lastGrade = GRADES.indexOf(copy[copy.length - 1].gradeStr);
-        if (firstGrade - lastGrade >= 2) {
-            return copy.reverse();
-        }
-        return copy;
+        return [...climbs].sort((a, b) => {
+            const tA = a.lastUpdated || a.timestamp || a.createdAt || a.id || 0;
+            const tB = b.lastUpdated || b.timestamp || b.createdAt || b.id || 0;
+            return tA - tB;
+        });
     }
 
     // ------------------------------------------------------------------------
@@ -271,8 +257,20 @@ const Planner = (function () {
         const intensityFactor = Math.pow(1.35, relIntensity);
 
         let outcomeFactor = 0.9;
-        if (isFlash(climb)) outcomeFactor = 1.1;
-        else if (!isSend(climb)) outcomeFactor = 0.85;
+        const pct = typeof climb.completionPct === 'number' ? climb.completionPct : (isSend(climb) ? 100 : 0);
+        if (isFlash(climb)) {
+            outcomeFactor = 1.10;
+        } else if (isSend(climb) || pct >= 100) {
+            outcomeFactor = 1.00;
+        } else if (pct >= 75) {
+            outcomeFactor = 0.95;
+        } else if (pct >= 50) {
+            outcomeFactor = 0.84;
+        } else if (pct >= 25) {
+            outcomeFactor = 0.74;
+        } else {
+            outcomeFactor = 0.65;
+        }
 
         let styleMult = 1.0;
         if (climb.tags && Array.isArray(climb.tags) && climb.tags.length > 0) {
@@ -1328,15 +1326,61 @@ const Planner = (function () {
             };
         }
 
-        // 3. Non-Sticky Rule of 3: Trigger ONLY if the most recent climb (or last 2) was a stalled project
+        // 3. Active Project Autoregulation & Rule of 3 (Responds dynamically to interaction order & completion %)
         const lastClimb = climbs[climbs.length - 1];
-        const prevClimb = climbs[climbs.length - 2];
-        const isStalledBurn = (c) => c && !isSend(c) && (parseInt(c.tries, 10) || 1) >= 4 && (!c.completionPct || c.completionPct < 75);
-        const consecutiveProjectFails = climbs.slice(-3).length === 3 && climbs.slice(-3).every(c => !isSend(c) && GRADES.indexOf(c.gradeStr) >= maxGradeIdx - 1);
+        if (lastClimb && !isSend(lastClimb)) {
+            const lastTries = Math.max(1, parseInt(lastClimb.tries, 10) || 1);
+            const lastPct = typeof lastClimb.completionPct === 'number' ? lastClimb.completionPct : 0;
+            const lastGradeIdx = GRADES.indexOf(lastClimb.gradeStr) >= 0 ? GRADES.indexOf(lastClimb.gradeStr) : maxGradeIdx;
+            const resetIdx = Math.max(0, maxGradeIdx - 2);
 
-        if (isStalledBurn(lastClimb) || (isStalledBurn(prevClimb) && !isSend(lastClimb) && GRADES.indexOf(lastClimb.gradeStr) >= maxGradeIdx - 1) || consecutiveProjectFails) {
+            // Stalled Low / Burn Cap: 4+ tries at <=25%, 5+ tries at <=50%, or 6+ tries overall
+            if ((lastTries >= 4 && lastPct <= 25) || (lastTries >= 5 && lastPct <= 50) || lastTries >= 6) {
+                return {
+                    stage: 'rule_of_3',
+                    category: 'Power Reset',
+                    targetGradeStr: GRADES[resetIdx],
+                    targetGradeIdx: resetIdx,
+                    targetTags: selectStylePair(['sloper', 'technical', 'slab'], true),
+                    title: `Reset (${lastClimb.gradeStr} Stalled at ${lastPct}%)`,
+                    advice: `${lastTries} tries at ${lastPct}% on ${lastClimb.gradeStr}. Stop burning skin—rest 4m and log an easy ${GRADES[resetIdx]} flow send to reset.`,
+                    icon: '⏱️'
+                };
+            }
+
+            // 75% Redpoint Closeout: crux unlocked, high point reached
+            if (lastPct === 75 && lastTries <= 5) {
+                return {
+                    stage: 'redpoint_closeout',
+                    category: 'Redpoint Closeout',
+                    targetGradeStr: lastClimb.gradeStr,
+                    targetGradeIdx: lastGradeIdx,
+                    targetTags: (lastClimb.tags && lastClimb.tags.length > 0) ? [...lastClimb.tags] : selectStylePair(['crimp', 'powerful'], false),
+                    title: `Finish Your ${lastClimb.gradeStr} (At 75%)`,
+                    advice: `You reached 75% in ${lastTries} ${lastTries === 1 ? 'try' : 'tries'}! Rest a full 4–5 min for 100% ATP-CP recovery and execute the top.`,
+                    icon: '🔥'
+                };
+            }
+
+            // 50% Crux Link: middle crux unlock
+            if (lastPct === 50 && lastTries >= 2 && lastTries <= 4) {
+                return {
+                    stage: 'project_momentum',
+                    category: 'Crux Link',
+                    targetGradeStr: lastClimb.gradeStr,
+                    targetGradeIdx: lastGradeIdx,
+                    targetTags: (lastClimb.tags && lastClimb.tags.length > 0) ? [...lastClimb.tags] : selectStylePair(['crimp', 'powerful', 'pinch'], false),
+                    title: `Link ${lastClimb.gradeStr} Crux (At 50%)`,
+                    advice: `Solid high point (50% on try ${lastTries}). Brush the crux holds, rest 3–4 min, and commit through the top half.`,
+                    icon: '🎯'
+                };
+            }
+        }
+
+        // Consecutive project fails across problems check:
+        const consecutiveProjectFails = climbs.slice(-3).length === 3 && climbs.slice(-3).every(c => !isSend(c) && GRADES.indexOf(c.gradeStr) >= maxGradeIdx - 1);
+        if (consecutiveProjectFails) {
             const targetIdx = Math.max(0, maxGradeIdx - 2);
-            const burnsLogged = lastClimb ? (lastClimb.tries || 3) : 4;
             return {
                 stage: 'rule_of_3',
                 category: 'Power Reset',
@@ -1344,7 +1388,7 @@ const Planner = (function () {
                 targetGradeIdx: targetIdx,
                 targetTags: selectStylePair(['sloper', 'technical', 'slab'], true),
                 title: 'Rule of 3: Neural Reset',
-                advice: `${burnsLogged}+ heavy attempts without a send. Take 4m rest and log 1 sub-maximal flow boulder to clear the alert.`,
+                advice: '3 consecutive project fails across problems. Take 4m rest and log 1 sub-maximal flow boulder to clear the alert.',
                 icon: '⏱️'
             };
         }

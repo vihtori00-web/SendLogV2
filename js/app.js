@@ -2117,6 +2117,11 @@
                 gradeStr: fontGrades[currentGradeIndex],
                 statusText, color, tries, points,
                 time: timeStr,
+                timestamp: Date.now(),
+                lastUpdated: Date.now(),
+                isTop, isFlash,
+                completionPct: isTop || isFlash ? 100 : 0,
+                prevCompletionPct: isTop || isFlash ? 100 : 0,
                 tags: [...selectedTags]
             });
 
@@ -2439,6 +2444,16 @@
                     rest: '3–5 minutes',
                     volume: 'Max effort burns'
                 },
+                redpoint_closeout: {
+                    rationale: 'Crux sequence unlocked and 75% high point achieved. Intracellular phosphocreatine (ATP-CP) requires a full 4–5 minute window for complete enzymatic restoration before the send attempt.',
+                    rest: '4–5 minutes',
+                    volume: '1 send burn'
+                },
+                project_momentum: {
+                    rationale: 'High point progress reached 50% through the sequence. Brush target crux holds, mentally rehearse foot transitions, and execute with committed momentum before local pump accumulates.',
+                    rest: '3–4 minutes',
+                    volume: '1–2 link attempts'
+                },
                 breakthrough: {
                     rationale: 'High pyramid base readiness or an intra-session flash streak indicates peak central nervous system potentiation. Channel this low-fatigue window into a supramaximal (+1 grade) boulder aligned with your strongest hold styles.',
                     rest: '4–5 minutes',
@@ -2756,10 +2771,13 @@
                 color: isFl ? 'text-amber-400' : isTp ? 'text-blue-400' : 'text-neutral-400',
                 tries: finalTries,
                 completionPct: finalCompletion,
+                prevCompletionPct: finalCompletion,
                 isTop: isTp,
                 isFlash: isFl,
                 points: pts,
                 time: timeStr,
+                timestamp: Date.now(),
+                lastUpdated: Date.now(),
                 tags: [...modalSelectedTags]
             };
 
@@ -2798,6 +2816,8 @@
             const pts = calculatePoints(delta, isFl, isTp, modalTries, modalCompletion);
             const colObj = getColorObj(modalColorTag);
 
+            climb.prevCompletionPct = typeof climb.completionPct === 'number' ? climb.completionPct : 0;
+            climb.lastUpdated = Date.now();
             climb.gradeStr = fontGrades[modalGradeIndex];
             climb.colorTag = modalColorTag;
             climb.colorHex = colObj.hex;
@@ -3142,12 +3162,18 @@
         // ============================================================================
         // INLINE ACTIONS ON ROUTE CARDS (EDIT / BURN / COMPLETION)
         // ============================================================================
+        function touchClimb(climb) {
+            if (!climb) return;
+            climb.lastUpdated = Date.now();
+        }
+
         function quickAdjustTries(routeId, delta) {
             const climb = (sessionClimbs || []).find(c => c.id === routeId);
             if (!climb) return;
 
             if (!sessionStartTime) startSession();
 
+            touchClimb(climb);
             climb.tries = Math.max(1, (climb.tries || 1) + delta);
             const gIdx = fontGrades.indexOf(climb.gradeStr);
             const deltaGrade = (gIdx >= 0 ? gIdx : maxGradeIndex) - maxGradeIndex;
@@ -3172,6 +3198,9 @@
             if (!climb) return;
 
             if (!sessionStartTime) startSession();
+
+            climb.prevCompletionPct = typeof climb.completionPct === 'number' ? climb.completionPct : 0;
+            touchClimb(climb);
 
             const isSent = pct === 100;
             const isFl = isSent && (climb.tries === 1);
@@ -3222,6 +3251,7 @@
             if (countEl) countEl.innerText = `${totalCount} item${totalCount === 1 ? '' : 's'}`;
 
             const editIconSvg = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>`;
+            const undoSvg = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h10a5 5 0 015 5v2M3 10l4-4m-4 4l4 4"/></svg>`;
 
             let workoutItemsHtml = '';
             if (sessionWorkouts && sessionWorkouts.length > 0) {
@@ -3282,6 +3312,7 @@
                     const badge = c.isFlash
                         ? `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">⚡ FLASH</span>`
                         : `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">✓ TOP · ${c.tries}t</span>`;
+                    const restorePct = (typeof c.prevCompletionPct === 'number' && c.prevCompletionPct < 100) ? c.prevCompletionPct : 75;
 
                     return `
                         <li class="px-3 py-2 bg-neutral-900/80 rounded-2xl border border-emerald-500/25 flex items-center justify-between gap-2 shadow-sm">
@@ -3293,7 +3324,7 @@
                             </div>
                             <div class="flex items-center gap-1.5 shrink-0 ml-1">
                                 <span class="text-emerald-400 font-black text-xs leading-none">+${c.points}</span>
-                                <button type="button" onclick="quickSetCompletion(${c.id}, 75)" title="Undo Send" class="h-7 px-2 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-400 hover:text-white text-[10px] font-black active:scale-90 transition-all">↩</button>
+                                <button type="button" onclick="quickSetCompletion(${c.id}, ${restorePct})" title="Undo Send" class="h-7 px-2 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-300 hover:text-white flex items-center justify-center active:scale-90 transition-all">${undoSvg}</button>
                                 <button type="button" onclick="openEditRouteModal(${c.id})" class="p-1.5 rounded-lg text-neutral-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 active:scale-90 transition-all" title="Edit Route">
                                     ${editIconSvg}
                                 </button>
