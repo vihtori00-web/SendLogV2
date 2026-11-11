@@ -1,18 +1,16 @@
 // ============================================================================
-// SendLog v2 - Intelligent Climbing Session Planner & Readiness Engine
-// Grounded in climbing physiology, ACWR (Acute:Chronic Workload Ratio),
-// Eric Hörst's 48-72h tendon remodeling, and Lattice / Climb Strong principles.
+// SendLog v2.1 - Adaptive Climbing Session Planner & Readiness Engine
+// Grounded in EWMA ACWR, 48-72h tendon remodeling, style-affinity profiling,
+// and intra-session autoregulation.
 // ============================================================================
 
 const Planner = (function () {
-    // Grade definitions matching app.js
     const GRADES = [
         '<4', '4', '4+', '5', '5+', '6A', '6A+', '6B', '6B+',
         '6C', '6C+', '7A', '7A+', '7B', '7B+', '7C', '7C+',
         '8A', '8A+', '8B', '8B+', '8C', '8C+', '9A'
     ];
 
-    // Style-specific neurological and connective tissue stress multipliers
     const STYLE_STRESS = {
         crimp: 1.45,      // Highest A2/A4 pulley and flexor tendon strain
         board: 1.40,      // System/Moon/Kilter board: extreme finger recruitment
@@ -23,6 +21,8 @@ const Planner = (function () {
         sloper: 0.90,     // Wrist extensor and open hand (low pulley strain)
         slab: 0.80        // Footwork, core, very low tendon stress
     };
+
+    const ALL_STYLES = Object.keys(STYLE_STRESS);
 
     // Off-the-wall exercise definitions and science-backed presets
     const EXERCISES_ANTAGONIST = [
@@ -150,14 +150,16 @@ const Planner = (function () {
         }
     ];
 
-    // User calibration settings stored in localStorage
+    // ------------------------------------------------------------------------
+    // STATE & LOCALSTORAGE HELPERS
+    // ------------------------------------------------------------------------
     function getCalibration() {
         try {
             const saved = localStorage.getItem('sendlog_v2_calibration');
             if (saved) return JSON.parse(saved);
         } catch (e) { }
         return {
-            capacityScalar: 1.0, // Multiplier on work capacity (higher = recovers faster)
+            capacityScalar: 1.0,
             fatigueSensitivity: 1.0,
             feedbackHistory: []
         };
@@ -169,7 +171,6 @@ const Planner = (function () {
         } catch (e) { }
     }
 
-    // Context check-in state with localStorage persistence
     function loadCheckin() {
         try {
             const saved = localStorage.getItem('boulderCheckin');
@@ -187,44 +188,131 @@ const Planner = (function () {
 
     let preSessionCheckin = loadCheckin();
 
+    function setCheckin(keyOrObj, value) {
+        preSessionCheckin = loadCheckin();
+        if (typeof keyOrObj === 'object' && keyOrObj !== null) {
+            preSessionCheckin = { ...preSessionCheckin, ...keyOrObj };
+        } else if (typeof keyOrObj === 'string') {
+            preSessionCheckin[keyOrObj] = value;
+        }
+        try {
+            localStorage.setItem('boulderCheckin', JSON.stringify(preSessionCheckin));
+        } catch (e) { }
+        return { ...preSessionCheckin };
+    }
+
+    function getCheckin() {
+        preSessionCheckin = loadCheckin();
+        return { ...preSessionCheckin };
+    }
+
+    function getStoredHistory() {
+        const candidateKeys = ['sendlog_history', 'boulderHistory', 'sessions', 'climbingHistory'];
+        for (const key of candidateKeys) {
+            try {
+                const raw = localStorage.getItem(key);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) return parsed;
+                }
+            } catch (e) { }
+        }
+        return [];
+    }
+
+    function isSend(climb) {
+        if (!climb) return false;
+        return Boolean(
+            climb.isTop ||
+            climb.isFlash ||
+            climb.statusText === 'Top' ||
+            climb.statusText === 'Flash'
+        );
+    }
+
+    function isFlash(climb) {
+        if (!climb) return false;
+        return Boolean(climb.isFlash || climb.statusText === 'Flash');
+    }
+
+    // Normalize session climbs so index 0 = oldest, index length-1 = most recent
+    function normalizeChronological(climbs = []) {
+        if (!Array.isArray(climbs) || climbs.length <= 1) return [...(climbs || [])];
+        const copy = [...climbs];
+
+        // 1. If timestamps or numeric IDs exist, sort ascending
+        const firstTs = copy[0].timestamp || copy[0].createdAt || copy[0].id;
+        const lastTs = copy[copy.length - 1].timestamp || copy[copy.length - 1].createdAt || copy[copy.length - 1].id;
+        if (typeof firstTs === 'number' && typeof lastTs === 'number' && firstTs !== lastTs) {
+            return copy.sort((a, b) => {
+                const tA = a.timestamp || a.createdAt || a.id || 0;
+                const tB = b.timestamp || b.createdAt || b.id || 0;
+                return tA - tB;
+            });
+        }
+
+        // 2. Heuristic fallback: if index 0 is much harder than the last index, UI is unshifting (newest-first)
+        const firstGrade = GRADES.indexOf(copy[0].gradeStr);
+        const lastGrade = GRADES.indexOf(copy[copy.length - 1].gradeStr);
+        if (firstGrade - lastGrade >= 2) {
+            return copy.reverse();
+        }
+        return copy;
+    }
+
     // ------------------------------------------------------------------------
     // 1. TRAINING LOAD (TL) CALCULATION
     // ------------------------------------------------------------------------
     function calculateClimbLoad(climb, maxGradeIdx) {
         const gradeIdx = GRADES.indexOf(climb.gradeStr);
         const effectiveGrade = gradeIdx >= 0 ? gradeIdx : Math.max(0, maxGradeIdx - 4);
-        const relIntensity = effectiveGrade - maxGradeIdx; // e.g. -2, -1, 0, +1
+        const relIntensity = effectiveGrade - maxGradeIdx;
 
-        // Exponential intensity factor: each grade jump increases strain significantly
         const intensityFactor = Math.pow(1.35, relIntensity);
 
-        // Outcome factor
         let outcomeFactor = 0.9;
-        if (climb.statusText === 'Flash') outcomeFactor = 1.1; // Peak power & execution
-        else if (climb.statusText === 'Project') outcomeFactor = 0.85; // Multiple burns without send
+        if (isFlash(climb)) outcomeFactor = 1.1;
+        else if (!isSend(climb)) outcomeFactor = 0.85;
 
-        // Style multiplier based on logged tags
         let styleMult = 1.0;
         if (climb.tags && Array.isArray(climb.tags) && climb.tags.length > 0) {
-            let tagSum = 0;
-            climb.tags.forEach(t => {
-                tagSum += (STYLE_STRESS[t] || 1.0);
-            });
+            const tagSum = climb.tags.reduce((sum, t) => sum + (STYLE_STRESS[t] || 1.0), 0);
             styleMult = tagSum / climb.tags.length;
         }
 
-        const tries = Math.max(1, parseInt(climb.tries) || 1);
+        const tries = Math.max(1, parseInt(climb.tries, 10) || 1);
         return (tries * intensityFactor * outcomeFactor * styleMult) * 10;
     }
 
     function calculateSessionLoad(session, maxGradeIdx) {
-        if (!session.climbs || session.climbs.length === 0) return 0;
         let totalLoad = 0;
-        session.climbs.forEach(c => {
-            totalLoad += calculateClimbLoad(c, maxGradeIdx);
-        });
+        if (session.climbs && session.climbs.length > 0) {
+            session.climbs.forEach(c => {
+                totalLoad += calculateClimbLoad(c, maxGradeIdx);
+            });
+        }
 
-        // Duration multiplier: prolonged sessions induce more CNS fatigue
+        if (session.workouts && session.workouts.length > 0) {
+            session.workouts.forEach(w => {
+                let workoutLoad = 0;
+                if (w.exercises && Array.isArray(w.exercises)) {
+                    w.exercises.forEach(ex => {
+                        const completed = parseInt(ex.completedSets, 10) || 0;
+                        const category = (w.category || '').toLowerCase();
+                        const perSetFactor = category.includes('hang') ? 25 : category.includes('strength') ? 20 : 15;
+                        workoutLoad += completed * perSetFactor;
+                    });
+                }
+                if (workoutLoad === 0) {
+                    const dur = w.durationMinutes || 20;
+                    workoutLoad = dur * 4;
+                }
+                totalLoad += workoutLoad;
+            });
+        }
+
+        if (totalLoad === 0) return 0;
+
         const durationMin = Math.round((session.duration || 3600) / 60);
         const durationFactor = Math.min(1.5, Math.max(0.7, durationMin / 75));
 
@@ -232,7 +320,7 @@ const Planner = (function () {
     }
 
     // ------------------------------------------------------------------------
-    // 2. ACWR & FATIGUE / FITNESS ENGINE
+    // 2. DAILY EWMA ACWR & READINESS ENGINE (Fixes Frequency Bug)
     // ------------------------------------------------------------------------
     function computeWorkloadMetrics(history, maxGradeIdx) {
         if (!history || history.length === 0) {
@@ -250,44 +338,43 @@ const Planner = (function () {
         const MS_PER_DAY = 24 * 60 * 60 * 1000;
         const calib = getCalibration();
 
-        // Calculate load for each session in history
-        const sessionLoads = history.map(s => {
+        // Bucket total load per day over the last 28 days (0 = today, 27 = 27 days ago)
+        const dailyLoads = new Array(28).fill(0);
+        history.forEach(s => {
             const timestamp = s.timestamp || now;
-            const daysAgo = Math.max(0, (now - timestamp) / MS_PER_DAY);
-            const load = calculateSessionLoad(s, maxGradeIdx);
-            return { timestamp, daysAgo, load, session: s };
-        });
-
-        // Exponential weights:
-        // Acute: 7-day half-life decay
-        // Chronic: 28-day half-life decay
-        let acuteNumerator = 0, acuteDenominator = 0;
-        let chronicNumerator = 0, chronicDenominator = 0;
-
-        sessionLoads.forEach(item => {
-            if (item.daysAgo <= 28) {
-                // Acute weighting (7 days)
-                if (item.daysAgo <= 7) {
-                    const acuteWeight = Math.exp(-item.daysAgo / (4.5 / calib.capacityScalar));
-                    acuteNumerator += item.load * acuteWeight;
-                    acuteDenominator += acuteWeight;
-                }
-                // Chronic weighting (28 days)
-                const chronicWeight = Math.exp(-item.daysAgo / 18);
-                chronicNumerator += item.load * chronicWeight;
-                chronicDenominator += chronicWeight;
+            const daysAgo = Math.floor(Math.max(0, (now - timestamp) / MS_PER_DAY));
+            if (daysAgo < 28) {
+                dailyLoads[daysAgo] += calculateSessionLoad(s, maxGradeIdx);
             }
         });
 
-        const acuteLoad = acuteDenominator > 0 ? (acuteNumerator / acuteDenominator) : 0;
-        const chronicLoad = chronicDenominator > 0 ? (chronicNumerator / chronicDenominator) : 100;
+        // Compute weekly equivalent loads with exponential decay across all 28 calendar days
+        const acuteDecay = 4.5 / (calib.capacityScalar || 1.0);
+        const chronicDecay = 18.0;
 
-        // ACWR calculation with smoothing baseline
+        let acuteWeightedSum = 0, acuteWeightTotal = 0;
+        let chronicWeightedSum = 0, chronicWeightTotal = 0;
+
+        for (let day = 0; day < 28; day++) {
+            const load = dailyLoads[day];
+            if (day < 7) {
+                const wA = Math.exp(-day / acuteDecay);
+                acuteWeightedSum += load * wA;
+                acuteWeightTotal += wA;
+            }
+            const wC = Math.exp(-day / chronicDecay);
+            chronicWeightedSum += load * wC;
+            chronicWeightTotal += wC;
+        }
+
+        // Convert daily EWMA into 7-day rolling workload equivalents
+        const acuteLoad = acuteWeightTotal > 0 ? (acuteWeightedSum / acuteWeightTotal) * 3.5 : 0;
+        const chronicLoad = chronicWeightTotal > 0 ? (chronicWeightedSum / chronicWeightTotal) * 3.5 : 100;
+
         const effectiveChronic = Math.max(80, chronicLoad);
         const rawAcwr = effectiveChronic > 0 ? (acuteLoad / effectiveChronic) : 1.0;
         const acwr = Math.round(rawAcwr * 100) / 100;
 
-        // Categorize ACWR according to sports science zones
         let statusCategory = 'sweet_spot';
         let statusText = 'Optimal Readiness (Sweet Spot)';
         let statusColor = 'emerald';
@@ -310,7 +397,14 @@ const Planner = (function () {
             statusColor = 'blue';
         }
 
-        return { acuteLoad: Math.round(acuteLoad), chronicLoad: Math.round(chronicLoad), acwr, statusText, statusColor, statusCategory };
+        return {
+            acuteLoad: Math.round(acuteLoad),
+            chronicLoad: Math.round(chronicLoad),
+            acwr,
+            statusText,
+            statusColor,
+            statusCategory
+        };
     }
 
     // ------------------------------------------------------------------------
@@ -330,7 +424,8 @@ const Planner = (function () {
 
         const now = Date.now();
         let lastHeavySessionTime = 0;
-        let heavyTagsFound = new Set();
+        let heavyLoadScore = 0;
+        const heavyTagsFound = new Set();
 
         for (let i = history.length - 1; i >= 0; i--) {
             const s = history[i];
@@ -343,7 +438,8 @@ const Planner = (function () {
                 const hasHighStrainTag = c.tags && c.tags.some(t => t === 'crimp' || t === 'board' || t === 'powerful');
 
                 if (isNearMax && hasHighStrainTag) {
-                    sessionCrimpLoad += (c.tries || 1);
+                    const weight = (c.tags.includes('crimp') || c.tags.includes('board')) ? 1.25 : 0.85;
+                    sessionCrimpLoad += (c.tries || 1) * weight;
                     (c.tags || []).forEach(t => {
                         if (t === 'crimp' || t === 'board' || t === 'powerful') heavyTagsFound.add(t);
                     });
@@ -352,6 +448,7 @@ const Planner = (function () {
 
             if (sessionCrimpLoad >= 3) {
                 lastHeavySessionTime = s.timestamp || (now - 24 * 60 * 60 * 1000);
+                heavyLoadScore = sessionCrimpLoad;
                 break;
             }
         }
@@ -368,35 +465,79 @@ const Planner = (function () {
         }
 
         const hoursElapsed = Math.max(0, Math.floor((now - lastHeavySessionTime) / (1000 * 60 * 60)));
-        const recoveryTargetHours = 48; // Baseline 48h collagen remodeling
+        // Scale target remodeling window between 48h (moderate) and 64h (heavy board/crimp session)
+        const recoveryTargetHours = heavyLoadScore >= 8 ? 64 : 48;
         const recoveryPct = Math.min(100, Math.round((hoursElapsed / recoveryTargetHours) * 100));
+        const hoursLeft = Math.max(0, recoveryTargetHours - hoursElapsed);
 
         let status = '100% Ready';
         let color = 'emerald';
         let advice = 'Tendon collagen fully remodeled.';
 
-        if (recoveryPct < 50) {
-            status = `Rebuilding (${48 - hoursElapsed}h left)`;
+        if (recoveryPct < 55) {
+            status = `Rebuilding (${hoursLeft}h left)`;
             color = 'red';
             advice = 'High pulley/tendon strain. Avoid crimps and board sessions today.';
         } else if (recoveryPct < 100) {
-            status = `Recovering (${48 - hoursElapsed}h left)`;
+            status = `Recovering (${hoursLeft}h left)`;
             color = 'amber';
             advice = 'Tendon remodeling underway. Sub-maximal climbing or open-hand recommended.';
         }
 
-        return {
-            recoveryPct,
-            hoursElapsed,
-            status,
-            color,
-            heavyTags: Array.from(heavyTagsFound),
-            advice
-        };
+        return { recoveryPct, hoursElapsed, status, color, heavyTags: Array.from(heavyTagsFound), advice };
     }
 
     // ------------------------------------------------------------------------
-    // 4. GRADE BREAKTHROUGH READINESS MODEL (ML / Statistical)
+    // 4. STYLE AFFINITY & WEAKNESS PROFILER (New)
+    // ------------------------------------------------------------------------
+    function computeStyleProfile(history = [], maxGradeIdx = 7) {
+        const stats = {};
+        ALL_STYLES.forEach(style => {
+            stats[style] = { attempts: 0, climbs: 0, sends: 0, flashes: 0, nearMaxSends: 0, score: 0.5 };
+        });
+
+        const recentSessions = (history || []).slice(-20);
+        recentSessions.forEach(s => {
+            (s.climbs || []).forEach(c => {
+                const gIdx = GRADES.indexOf(c.gradeStr);
+                const sent = isSend(c);
+                const flashed = isFlash(c);
+                const tries = Math.max(1, parseInt(c.tries, 10) || 1);
+
+                (c.tags || []).forEach(tag => {
+                    if (!stats[tag]) return;
+                    stats[tag].climbs += 1;
+                    stats[tag].attempts += tries;
+                    if (sent) stats[tag].sends += 1;
+                    if (flashed) stats[tag].flashes += 1;
+                    if (sent && gIdx >= maxGradeIdx - 1) stats[tag].nearMaxSends += 1;
+                });
+            });
+        });
+
+        ALL_STYLES.forEach(style => {
+            const st = stats[style];
+            if (st.climbs === 0) {
+                st.score = 0.45; // Untested / under-climbed bias
+            } else {
+                const sendRate = st.sends / st.climbs;
+                const flashRate = st.flashes / st.climbs;
+                const maxBonus = Math.min(0.25, st.nearMaxSends * 0.06);
+                st.score = Math.min(1.0, (sendRate * 0.55) + (flashRate * 0.25) + maxBonus);
+            }
+        });
+
+        const sortedByScore = [...ALL_STYLES].sort((a, b) => stats[b].score - stats[a].score);
+        const strongStyles = sortedByScore.slice(0, 3);
+        const weakStyles = [...ALL_STYLES]
+            .sort((a, b) => (stats[a].score + stats[a].climbs * 0.02) - (stats[b].score + stats[b].climbs * 0.02))
+            .slice(0, 3);
+
+        return { stats, strongStyles, weakStyles };
+    }
+
+    // ------------------------------------------------------------------------
+    // 5. GRADE BREAKTHROUGH READINESS MODEL
     // ------------------------------------------------------------------------
     function computeGradeReadiness(history, maxGradeIdx) {
         if (!history || history.length === 0) {
@@ -419,9 +560,9 @@ const Planner = (function () {
         const atMaxClimbs = allRecentClimbs.filter(c => GRADES.indexOf(c.gradeStr) === maxGradeIdx);
         const atSubMaxClimbs = allRecentClimbs.filter(c => GRADES.indexOf(c.gradeStr) === (maxGradeIdx - 1));
 
-        const maxSends = atMaxClimbs.filter(c => c.statusText === 'Top' || c.statusText === 'Flash');
-        const subMaxSends = atSubMaxClimbs.filter(c => c.statusText === 'Top' || c.statusText === 'Flash');
-        const subMaxFlashes = atSubMaxClimbs.filter(c => c.statusText === 'Flash');
+        const maxSends = atMaxClimbs.filter(isSend);
+        const subMaxSends = atSubMaxClimbs.filter(isSend);
+        const subMaxFlashes = atSubMaxClimbs.filter(isFlash);
 
         const pyramidRatio = Math.min(1.0, maxSends.length / 5);
         const flashRateSubMax = subMaxSends.length > 0 ? (subMaxFlashes.length / subMaxSends.length) : 0;
@@ -986,386 +1127,6 @@ const Planner = (function () {
         };
     }
 
-    // ------------------------------------------------------------------------
-    // 6. INTRA-SESSION FATIGUE DETECTOR (Live in session)
-    // ------------------------------------------------------------------------
-    function evaluateLiveFatigue(activeClimbs, sessionElapsedSeconds) {
-        if (!activeClimbs || activeClimbs.length < 3) {
-            return { fatigueDetected: false, alertMessage: null };
-        }
-
-        // Rule of 3: 3 consecutive failed project burns
-        let consecutiveProjectFails = 0;
-        for (let i = 0; i < Math.min(4, activeClimbs.length); i++) {
-            const c = activeClimbs[i];
-            if (c.statusText === 'Project') {
-                consecutiveProjectFails++;
-            } else {
-                break;
-            }
-        }
-
-        if (consecutiveProjectFails >= 3) {
-            return {
-                fatigueDetected: true,
-                severity: 'warning',
-                alertMessage: '⚠️ Rule of 3 Triggered: 3 consecutive failed project burns. Neuromuscular power has dropped. Switch to easy volume or wrap up to protect pulleys.'
-            };
-        }
-
-        const elapsedMinutes = Math.round((sessionElapsedSeconds || 0) / 60);
-        if (elapsedMinutes >= 75) {
-            const recentClimbs = activeClimbs.slice(0, 3);
-            const recentPointsPerTry = recentClimbs.reduce((sum, c) => sum + ((c.points || 0) / (c.tries || 1)), 0) / recentClimbs.length;
-
-            if (recentPointsPerTry < 4.0 && elapsedMinutes >= 90) {
-                return {
-                    fatigueDetected: true,
-                    severity: 'critical',
-                    alertMessage: '🛑 Session Fatigue Warning: 90m+ elapsed with low efficiency. Further limit attempts create junk volume and spike injury risk.'
-                };
-            }
-        }
-
-        return { fatigueDetected: false, alertMessage: null };
-    }
-
-    // ------------------------------------------------------------------------
-    // 7. INTRA-SESSION PERFORMANCE ADAPTATION (Dynamic Coach)
-    // ------------------------------------------------------------------------
-    function evaluateIntraSessionAdaptation(activeClimbs, currentPhaseIndex, coachPlan, inProgressClimb) {
-        if (!coachPlan || !coachPlan.phases || !coachPlan.phases[currentPhaseIndex]) {
-            return null;
-        }
-
-        const phase = coachPlan.phases[currentPhaseIndex];
-        const phaseTitle = (phase.title || phase.name || '').toLowerCase();
-        const targetGradeIdx = phase.targetGradeIdx;
-        const targetGradeStr = phase.targetGradeStr;
-
-        // 0. LIVE IN-PROGRESS WORKING BOULDER CHECKS (Before climb is logged)
-        if (inProgressClimb && inProgressClimb.tries) {
-            const currentTries = inProgressClimb.tries;
-            const currentGradeIdx = GRADES.indexOf(inProgressClimb.gradeStr);
-            const isNearTarget = targetGradeIdx !== null && currentGradeIdx >= (targetGradeIdx - 1);
-
-            // Live Limit Projecting Checks
-            const isProjectPhase = phaseTitle.includes('project') || phaseTitle.includes('limit') || phaseTitle.includes('main');
-            if (isProjectPhase && isNearTarget) {
-                if (currentTries >= 5) {
-                    return {
-                        id: `live_burn_cap_${currentTries}`,
-                        type: 'burn_cap',
-                        title: '🛑 Limit Burn Cap Reached',
-                        message: `${currentTries} burns on this boulder. Fast-twitch motor recruitment degrades after 5 max burns. Advance to cool down to protect pulleys.`,
-                        badgeColor: 'amber',
-                        actions: [
-                            {
-                                label: 'Advance to Cool Down ⏭️',
-                                action: 'advance_phase',
-                                primary: true
-                            }
-                        ]
-                    };
-                }
-                if (currentTries >= 3 && inProgressClimb.status !== 'topped') {
-                    return {
-                        id: `live_rule_of_3_${currentTries}`,
-                        type: 'rule_of_3',
-                        title: '⚠️ Rule of 3 (In Progress)',
-                        message: `${currentTries} burns on this project problem. Rate of force development is dropping. Consider resting 4m or wrapping up limit burns.`,
-                        badgeColor: 'amber',
-                        actions: [
-                            {
-                                label: 'Advance to Cool Down ⏭️',
-                                action: 'advance_phase',
-                                primary: true
-                            },
-                            {
-                                label: '⏱️ +2m Rest',
-                                action: 'add_rest',
-                                restSeconds: 120,
-                                primary: false
-                            }
-                        ]
-                    };
-                }
-            }
-
-            // Live Warmup Struggle
-            const isWarmupPhase = phaseTitle.includes('warmup') || phaseTitle.includes('movement');
-            if (isWarmupPhase && currentTries >= 2 && inProgressClimb.status !== 'topped') {
-                return {
-                    id: `live_warmup_struggle_${currentTries}`,
-                    type: 'warmup_struggle',
-                    title: '⚠️ Warmup Taking Extra Burns',
-                    message: `Warmup boulder has taken ${currentTries} burns. Connective tissues need extra time to warm up. Take 2m rest before ramping up intensity.`,
-                    badgeColor: 'amber',
-                    actions: [
-                        {
-                            label: '⏱️ +2m Warmup Rest',
-                            action: 'add_rest',
-                            restSeconds: 120,
-                            primary: true
-                        }
-                    ]
-                };
-            }
-
-            // Live Volume Flash-Pump Check
-            const isVolumePhase = phaseTitle.includes('volume') || phaseTitle.includes('density') || phaseTitle.includes('circuit');
-            if (isVolumePhase && currentTries >= 3 && inProgressClimb.status !== 'topped') {
-                const softerIdx = targetGradeIdx !== null && targetGradeIdx !== undefined ? Math.max(0, targetGradeIdx - 1) : null;
-                const softerStr = softerIdx !== null ? GRADES[softerIdx] : null;
-                return {
-                    id: `live_volume_pump_${currentTries}`,
-                    type: 'volume_flash_pump',
-                    title: '⚠️ Volume Flash-Pump (In Progress)',
-                    message: `Working burn #${currentTries} on a volume boulder. Deep pump compromises aerobic capacity and movement flow.`,
-                    badgeColor: 'amber',
-                    actions: [
-                        {
-                            label: '⏱️ +60s Rest',
-                            action: 'add_rest',
-                            restSeconds: 60,
-                            primary: true
-                        },
-                        ...(softerStr ? [{
-                            label: `🛡️ Drop to ${softerStr}`,
-                            action: 'drop_grade',
-                            newGradeIdx: softerIdx,
-                            newGradeStr: softerStr,
-                            primary: false
-                        }] : [{
-                            label: 'Advance Phase ⏭️',
-                            action: 'advance_phase',
-                            primary: false
-                        }])
-                    ]
-                };
-            }
-        }
-
-        // Filter climbs logged in this session that belong to this phase or recent climbs
-        const phaseClimbs = (activeClimbs || []).filter(c => {
-            if (c.phaseName) {
-                return c.phaseName.toLowerCase() === (phase.title || phase.name || '').toLowerCase();
-            }
-            return true;
-        });
-
-        if (phaseClimbs.length === 0) return null;
-
-        // 1. EARLY PROJECT SEND (Limit Project Phase)
-        const isProjectPhase = phaseTitle.includes('project') || phaseTitle.includes('limit') || phaseTitle.includes('main');
-        if (isProjectPhase && targetGradeIdx !== null && targetGradeIdx !== undefined) {
-            const sendAtTarget = phaseClimbs.find(c => 
-                (c.statusText === 'Top' || c.statusText === 'Flash') &&
-                GRADES.indexOf(c.gradeStr) >= targetGradeIdx
-            );
-
-            if (sendAtTarget) {
-                const sendGradeIdx = GRADES.indexOf(sendAtTarget.gradeStr);
-                const nextGradeIdx = Math.min(GRADES.length - 1, sendGradeIdx + 1);
-                const nextGradeStr = GRADES[nextGradeIdx];
-
-                if (nextGradeIdx > sendGradeIdx) {
-                    const hasNextPhase = currentPhaseIndex < (coachPlan.phases.length - 1);
-                    const nextPhaseObj = hasNextPhase ? coachPlan.phases[currentPhaseIndex + 1] : null;
-                    const nextPhaseLabel = nextPhaseObj ? `Next: ${nextPhaseObj.title || nextPhaseObj.name} ⏭️` : '🏁 Cool Down';
-
-                    return {
-                        id: `early_send_${sendAtTarget.id}`,
-                        type: 'early_send',
-                        title: '🚀 Project Sent!',
-                        message: `Sent ${sendAtTarget.gradeStr} in ${sendAtTarget.tries} burn${sendAtTarget.tries > 1 ? 's' : ''}! Power reserve is high today.`,
-                        badgeColor: 'emerald',
-                        actions: [
-                            {
-                                label: `🔥 Bump to ${nextGradeStr}`,
-                                action: 'bump_grade',
-                                newGradeIdx: nextGradeIdx,
-                                newGradeStr: nextGradeStr,
-                                primary: true
-                            },
-                            {
-                                label: nextPhaseLabel,
-                                action: 'advance_phase',
-                                primary: false
-                            }
-                        ]
-                    };
-                }
-            }
-
-            // 2. PROJECT BURN CAP (5 Limit Burns)
-            const totalProjectBurns = phaseClimbs.reduce((acc, c) => acc + (c.tries || 1), 0);
-            if (totalProjectBurns >= 5) {
-                return {
-                    id: `burn_cap_${totalProjectBurns}`,
-                    type: 'burn_cap',
-                    title: '🛑 Limit Burn Cap Reached',
-                    message: `${totalProjectBurns} limit burns logged. Neuromuscular recruitment degrades after 5 max attempts.`,
-                    badgeColor: 'amber',
-                    actions: [
-                        {
-                            label: 'Advance Phase ⏭️',
-                            action: 'advance_phase',
-                            primary: true
-                        }
-                    ]
-                };
-            }
-        }
-
-        // 3. CNS PRIMING STRUGGLE / FAILURE
-        const isPrimingPhase = phaseTitle.includes('priming') || phaseTitle.includes('cns');
-        if (isPrimingPhase && targetGradeIdx !== null && targetGradeIdx !== undefined) {
-            const latestClimb = phaseClimbs[0];
-            if (latestClimb && (latestClimb.statusText === 'Project' || (latestClimb.tries && latestClimb.tries >= 3))) {
-                const softerTargetIdx = Math.max(0, targetGradeIdx - 1);
-                const softerTargetStr = GRADES[softerTargetIdx];
-                return {
-                    id: `priming_struggle_${latestClimb.id}`,
-                    type: 'priming_struggle',
-                    title: '⚠️ Priming Heavy',
-                    message: 'High-threshold recruitment feels sluggish. Ease limit target by -1 to protect fingers and consolidate.',
-                    badgeColor: 'amber',
-                    actions: [
-                        {
-                            label: `🛡️ Adjust Target (${softerTargetStr})`,
-                            action: 'drop_grade',
-                            newGradeIdx: softerTargetIdx,
-                            newGradeStr: softerTargetStr,
-                            primary: true
-                        },
-                        {
-                            label: '⏱️ +2m Rest',
-                            action: 'add_rest',
-                            restSeconds: 120,
-                            primary: false
-                        }
-                    ]
-                };
-            }
-        }
-
-        // 4. RULE OF 3 DETECTED
-        let consecutiveProjectFails = 0;
-        for (let i = 0; i < Math.min(3, phaseClimbs.length); i++) {
-            if (phaseClimbs[i].statusText === 'Project') {
-                consecutiveProjectFails++;
-            } else {
-                break;
-            }
-        }
-        if (consecutiveProjectFails >= 3) {
-            return {
-                id: `rule_of_3_${phaseClimbs[0]?.id}`,
-                type: 'rule_of_3',
-                title: '⚠️ Rule of 3 Triggered',
-                message: '3 consecutive project fails. Fast-twitch power has peaked for this session.',
-                badgeColor: 'amber',
-                actions: [
-                    {
-                        label: 'Advance to Cool Down ⏭️',
-                        action: 'advance_phase',
-                        primary: true
-                    }
-                ]
-            };
-        }
-
-        // 5. WARMUP STRUGGLE / MULTIPLE ATTEMPTS
-        const isWarmupPhase = phaseTitle.includes('warmup') || phaseTitle.includes('movement');
-        if (isWarmupPhase) {
-            const heavyWarmup = phaseClimbs.find(c => (c.tries && c.tries >= 2) || c.statusText === 'Project');
-            if (heavyWarmup) {
-                return {
-                    id: `warmup_struggle_${heavyWarmup.id}`,
-                    type: 'warmup_struggle',
-                    title: '⚠️ Warmup Taking Extra Burns',
-                    message: `Warmup problem took ${heavyWarmup.tries} attempt${heavyWarmup.tries > 1 ? 's' : ''}. Connective tissues need extra time to warm up. Take 2m rest before ramping up intensity.`,
-                    badgeColor: 'amber',
-                    actions: [
-                        {
-                            label: '⏱️ +2m Warmup Rest',
-                            action: 'add_rest',
-                            restSeconds: 120,
-                            primary: true
-                        }
-                    ]
-                };
-            }
-        }
-
-        // 6. VOLUME FLASH-PUMP (Completed Volume Block Climbs)
-        const isVolumePhaseCompleted = phaseTitle.includes('volume') || phaseTitle.includes('density') || phaseTitle.includes('circuit');
-        if (isVolumePhaseCompleted && targetGradeIdx !== null && targetGradeIdx !== undefined) {
-            let consecutiveVolumeFails = 0;
-            for (let i = 0; i < Math.min(2, phaseClimbs.length); i++) {
-                if (phaseClimbs[i].statusText === 'Project' || (phaseClimbs[i].tries && phaseClimbs[i].tries >= 3)) {
-                    consecutiveVolumeFails++;
-                } else {
-                    break;
-                }
-            }
-            if (consecutiveVolumeFails >= 2) {
-                const softerIdx = Math.max(0, targetGradeIdx - 1);
-                const softerStr = GRADES[softerIdx];
-                return {
-                    id: `volume_pump_${phaseClimbs[0]?.id}`,
-                    type: 'volume_flash_pump',
-                    title: '⚠️ Volume Flash-Pump Detected',
-                    message: 'Multiple failures in volume block. Lower grade by 1 or add rest to keep moves aerobic.',
-                    badgeColor: 'amber',
-                    actions: [
-                        {
-                            label: `🛡️ Ease to ${softerStr}`,
-                            action: 'drop_grade',
-                            newGradeIdx: softerIdx,
-                            newGradeStr: softerStr,
-                            primary: true
-                        },
-                        {
-                            label: '⏱️ +60s Rest',
-                            action: 'add_rest',
-                            restSeconds: 60,
-                            primary: false
-                        }
-                    ]
-                };
-            }
-        }
-
-        return null;
-    }
-
-    // ------------------------------------------------------------------------
-    // 8. POST-SESSION CALIBRATION FEEDBACK
-    // ------------------------------------------------------------------------
-    function recordFeedback(rating) {
-        const calib = getCalibration();
-        if (rating === 'easy') {
-            calib.capacityScalar = Math.min(1.4, Math.round((calib.capacityScalar + 0.05) * 100) / 100);
-        } else if (rating === 'hard') {
-            calib.capacityScalar = Math.max(0.7, Math.round((calib.capacityScalar - 0.05) * 100) / 100);
-        }
-        calib.feedbackHistory.push({ date: Date.now(), rating });
-        saveCalibration(calib);
-    }
-
-    function setCheckin(key, value) {
-        preSessionCheckin[key] = value;
-        try {
-            localStorage.setItem('boulderCheckin', JSON.stringify(preSessionCheckin));
-        } catch (e) { }
-    }
-
-    function getCheckin() {
-        return { ...preSessionCheckin };
-    }
-
     function resolveMaxGradeIdx(history) {
         const stored = localStorage.getItem('boulderMaxGradeIndex');
         let highestSendIdx = -1;
@@ -1373,7 +1134,7 @@ const Planner = (function () {
             for (const session of history) {
                 if (!session || !Array.isArray(session.climbs)) continue;
                 for (const climb of session.climbs) {
-                    if (climb.statusText === 'Top' || climb.statusText === 'Flash' || climb.isTop || climb.isFlash) {
+                    if (isSend(climb)) {
                         const idx = GRADES.indexOf(climb.gradeStr);
                         if (idx > highestSendIdx) {
                             highestSendIdx = idx;
@@ -1386,8 +1147,6 @@ const Planner = (function () {
         if (stored !== null && stored !== undefined && stored !== '') {
             const parsed = parseInt(stored, 10);
             if (!isNaN(parsed) && parsed >= 0 && parsed < GRADES.length) {
-                // If stored is 14 (the old default fallback 7B+) but user has never sent 14,
-                // fall back to user's highest logged send if available
                 if (parsed === 14 && highestSendIdx >= 0 && highestSendIdx < 14) {
                     return highestSendIdx;
                 }
@@ -1403,216 +1162,381 @@ const Planner = (function () {
     }
 
     function getTodayPlan() {
-        const history = JSON.parse(localStorage.getItem('boulderHistory')) || [];
+        let history = [];
+        try {
+            history = JSON.parse(localStorage.getItem('boulderHistory')) || [];
+        } catch (e) {
+            history = [];
+        }
         const maxGradeIdx = resolveMaxGradeIdx(history);
         return generateDailyPlan(history, maxGradeIdx);
+    }
+
+    function recordFeedback(rating) {
+        const calib = getCalibration();
+        if (rating === 'easy') {
+            calib.capacityScalar = Math.min(1.4, Math.round((calib.capacityScalar + 0.05) * 100) / 100);
+        } else if (rating === 'hard') {
+            calib.capacityScalar = Math.max(0.7, Math.round((calib.capacityScalar - 0.05) * 100) / 100);
+        }
+        calib.feedbackHistory.push({ date: Date.now(), rating });
+        saveCalibration(calib);
+    }
+
+    // ------------------------------------------------------------------------
+    // 6. INTRA-SESSION DYNAMIC ADAPTATION ENGINE
+    // ------------------------------------------------------------------------
+    function evaluateIntraSessionAdaptation(chronologicalClimbs = [], maxGradeIdx = 7, checkin = { fingers: 'fresh', skin: 'good', time: 90 }) {
+        if (!chronologicalClimbs || chronologicalClimbs.length === 0) {
+            return { gradeDelta: 0, mode: 'standard', reason: null };
+        }
+
+        // Check for hot streak: flashed max-1 or sent max in <= 2 tries recently
+        const recent = chronologicalClimbs.slice(-3);
+        const flashedSubMax = recent.some(c => GRADES.indexOf(c.gradeStr) >= (maxGradeIdx - 1) && isFlash(c));
+        const quickMaxSend = recent.some(c => GRADES.indexOf(c.gradeStr) >= maxGradeIdx && isSend(c) && (c.tries || 1) <= 2);
+
+        if ((flashedSubMax || quickMaxSend) && checkin.fingers === 'fresh' && checkin.skin !== 'split') {
+            return {
+                gradeDelta: 1,
+                mode: 'hot_streak',
+                reason: 'High neural recruitment detected from clean sends. Stepping target intensity up.'
+            };
+        }
+
+        // Check for volume flash-pump: multiple tries on sub-max boulders without sending
+        const subMaxStruggles = recent.filter(c => {
+            const gIdx = GRADES.indexOf(c.gradeStr);
+            return gIdx <= (maxGradeIdx - 1) && gIdx >= (maxGradeIdx - 2) && !isSend(c) && (c.tries || 1) >= 3;
+        });
+
+        if (subMaxStruggles.length >= 2) {
+            return {
+                gradeDelta: -1,
+                mode: 'flash_pump',
+                reason: 'Sub-maximal attempt efficiency dropping. Shifting to technical consolidation.'
+            };
+        }
+
+        return { gradeDelta: 0, mode: 'standard', reason: null };
+    }
+
+    // ------------------------------------------------------------------------
+    // 7. LIVE IN-SESSION CLIMB RECOMMENDATION ENGINE (Upgraded)
+    // ------------------------------------------------------------------------
+    function recommendNextClimb(sessionClimbs = [], maxGradeIdx = 7, elapsedMinutes = 0, altIndex = 0, optionalHistory = null) {
+        const climbs = normalizeChronological(sessionClimbs);
+        const climbCount = climbs.length;
+        const totalTries = climbs.reduce((acc, c) => acc + (parseInt(c.tries, 10) || 1), 0);
+
+        const checkin = loadCheckin();
+        const history = Array.isArray(optionalHistory) ? optionalHistory : getStoredHistory();
+        const tendon = computeTendonRecovery(history, maxGradeIdx);
+        const workload = computeWorkloadMetrics(history, maxGradeIdx);
+        const readiness = computeGradeReadiness(history, maxGradeIdx);
+        const styleProfile = computeStyleProfile(history, maxGradeIdx);
+        const adaptation = evaluateIntraSessionAdaptation(climbs, maxGradeIdx, checkin);
+
+        // Deterministic seed that changes every time a climb or burn is logged, or altIndex changes
+        const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 12));
+        const rotationSeed = climbCount * 7 + totalTries * 3 + altIndex * 11 + daySeed;
+
+        // Gather recently used tags (last 2 climbs) to prevent repetitive style recommendations
+        const recentTags = new Set(climbs.slice(-2).flatMap(c => c.tags || []));
+
+        // Determine banned tags from finger/tendon/skin state
+        const bannedTags = new Set();
+        const protectPulleys = (
+            checkin.fingers === 'tweaky' ||
+            tendon.recoveryPct < 60 ||
+            workload.statusCategory === 'high_risk'
+        );
+        if (protectPulleys) {
+            bannedTags.add('crimp');
+            bannedTags.add('board');
+        } else if (checkin.fingers === 'stiff' || tendon.recoveryPct < 85) {
+            bannedTags.add('board');
+        }
+        if (checkin.skin === 'split') {
+            bannedTags.add('crimp');
+            bannedTags.add('dyno');
+        }
+
+        // Helper to pick a diverse pair of tags tailored to the current phase
+        function selectStylePair(candidatePool, preferWeakness = false) {
+            const valid = candidatePool.filter(t => !bannedTags.has(t));
+            const pool = valid.length >= 2 ? valid : ALL_STYLES.filter(t => !bannedTags.has(t));
+
+            const scored = pool.map((tag, idx) => {
+                let score = 1.0;
+                if (recentTags.has(tag)) score -= 0.45; // Rotate away from last 2 climbs
+                const profScore = styleProfile.stats[tag] ? styleProfile.stats[tag].score : 0.5;
+                score += preferWeakness ? (1.0 - profScore) * 0.4 : profScore * 0.4;
+                const jitter = ((rotationSeed + idx * 17) % 10) * 0.045;
+                return { tag, total: score + jitter };
+            }).sort((a, b) => b.total - a.total);
+
+            if (scored.length === 0) return ['technical', 'slab'];
+            if (scored.length === 1) return [scored[0].tag];
+            return [scored[0].tag, scored[1].tag];
+        }
+
+        // Dynamic session cutoff thresholds scaled by check-in time (45, 90, 120m)
+        const timeLimit = Math.round((checkin.time || 90) * 0.82);
+        const burnLimit = checkin.time === 45 ? 14 : checkin.time === 120 ? 26 : 20;
+
+        // 1. Cooldown Check (Dynamic time or burn cap reached)
+        if (elapsedMinutes >= timeLimit || totalTries >= burnLimit) {
+            const coolTags = selectStylePair(['slab', 'technical', 'sloper'], true);
+            const targetIdx = Math.max(0, maxGradeIdx - 3);
+            return {
+                stage: 'cooldown',
+                category: 'Cool-Down',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: coolTags,
+                title: 'Cool-Down Flow',
+                advice: `Session cap reached (${elapsedMinutes}m / ${totalTries} burns). Flush forearm metabolites with relaxed open-hand flow.`,
+                icon: '🧘'
+            };
+        }
+
+        // 2. High Strain Warning: Check the LAST 2–3 climbs for consecutive crimp/board loading
+        let recentHighStrainCount = 0;
+        let recentHighStrainTries = 0;
+        for (let i = climbs.length - 1; i >= Math.max(0, climbs.length - 3); i--) {
+            const c = climbs[i];
+            if (c.tags && c.tags.some(t => t === 'crimp' || t === 'board')) {
+                recentHighStrainCount++;
+                recentHighStrainTries += (parseInt(c.tries, 10) || 1);
+            } else {
+                break; // Resets as soon as user logs a non-crimp/board climb!
+            }
+        }
+
+        if (recentHighStrainCount >= 3 || (recentHighStrainCount >= 2 && recentHighStrainTries >= 6)) {
+            const targetIdx = Math.max(0, maxGradeIdx - 1);
+            return {
+                stage: 'strain_pivot',
+                category: 'Pulley Reset',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: selectStylePair(['sloper', 'pinch', 'technical', 'slab'], true),
+                title: 'Pulley Deload Pivot',
+                advice: `${recentHighStrainTries} high-strain crimp/board burns logged back-to-back. Pivot to open-hand or compression for 1–2 climbs.`,
+                icon: '🛡️'
+            };
+        }
+
+        // 3. Non-Sticky Rule of 3: Trigger ONLY if the most recent climb (or last 2) was a stalled project
+        const lastClimb = climbs[climbs.length - 1];
+        const prevClimb = climbs[climbs.length - 2];
+        const isStalledBurn = (c) => c && !isSend(c) && (parseInt(c.tries, 10) || 1) >= 4 && (!c.completionPct || c.completionPct < 75);
+        const consecutiveProjectFails = climbs.slice(-3).length === 3 && climbs.slice(-3).every(c => !isSend(c) && GRADES.indexOf(c.gradeStr) >= maxGradeIdx - 1);
+
+        if (isStalledBurn(lastClimb) || (isStalledBurn(prevClimb) && !isSend(lastClimb) && GRADES.indexOf(lastClimb.gradeStr) >= maxGradeIdx - 1) || consecutiveProjectFails) {
+            const targetIdx = Math.max(0, maxGradeIdx - 2);
+            const burnsLogged = lastClimb ? (lastClimb.tries || 3) : 4;
+            return {
+                stage: 'rule_of_3',
+                category: 'Power Reset',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: selectStylePair(['sloper', 'technical', 'slab'], true),
+                title: 'Rule of 3: Neural Reset',
+                advice: `${burnsLogged}+ heavy attempts without a send. Take 4m rest and log 1 sub-maximal flow boulder to clear the alert.`,
+                icon: '⏱️'
+            };
+        }
+
+        // 4. Progressive Warm-up Phase (Checks actual grades climbed, not just climbCount < 2)
+        const highestGradeClimbed = climbs.reduce((maxG, c) => Math.max(maxG, GRADES.indexOf(c.gradeStr)), -1);
+        const warmupTargetFloor = Math.max(0, maxGradeIdx - 2);
+
+        if (climbCount < 2 || highestGradeClimbed < Math.max(0, maxGradeIdx - 3)) {
+            const stepOffset = climbCount === 0 ? 3 : 2;
+            const targetIdx = Math.max(0, maxGradeIdx - stepOffset);
+            const warmTags = selectStylePair(['slab', 'technical', 'sloper'], true);
+            return {
+                stage: 'warmup',
+                category: 'Warmup',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: warmTags,
+                title: climbCount === 0 ? 'Warmup: Synovial Flow' : 'Warmup: Progressive Recruitment',
+                advice: 'Elevate tendon temperature and hip mobility with deliberate, quiet footwork before pulling hard.',
+                icon: '🌱'
+            };
+        }
+
+        // 5. Pyramid Ramp (Ensures climber has touched at least maxGradeIdx - 1 or 2 ramp climbs before peak projecting)
+        const hasRampedNearMax = climbs.some(c => GRADES.indexOf(c.gradeStr) >= (maxGradeIdx - 1));
+        if (climbCount < 4 && !hasRampedNearMax) {
+            const targetIdx = Math.max(0, maxGradeIdx - 1);
+            const rampTags = selectStylePair(['sloper', 'powerful', 'pinch', 'technical', 'dyno'], false);
+            return {
+                stage: 'pyramid',
+                category: 'Pyramid Ramp',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: rampTags,
+                title: 'Potentiation Ramp',
+                advice: `Flash or 2nd-go target at ${GRADES[targetIdx]}. Move fast through the crux to prime high-threshold motor units.`,
+                icon: '⚡'
+            };
+        }
+
+        // 6. Autoregulated Main Session Phase (Adapts to Readiness, Check-in, Hot Streaks, and Weaknesses)
+        // 6A: Recovery / Elevated Fatigue / Tweaky Fingers -> Volume Consolidation & Weakness Targeting
+        if (protectPulleys || workload.statusCategory === 'elevated' || adaptation.mode === 'flash_pump') {
+            const offset = (protectPulleys || adaptation.mode === 'flash_pump') ? 2 : 1;
+            const targetIdx = Math.max(0, maxGradeIdx - offset);
+            const weakTags = selectStylePair(styleProfile.weakStyles.concat(['sloper', 'technical', 'pinch', 'slab']), true);
+            return {
+                stage: 'volume_consolidation',
+                category: 'Volume & Technique',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: weakTags,
+                title: protectPulleys ? 'Tendon-Safe Technical Volume' : 'Pyramid Base Consolidation',
+                advice: `${adaptation.reason || tendon.advice} Focus on 1st/2nd-go execution in your less-climbed styles (${weakTags.join(' + ')}).`,
+                icon: '📐'
+            };
+        }
+
+        // 6B: Breakthrough Push (Unlocked when Grade Readiness >= 75% OR Intra-Session Hot Streak)
+        if ((readiness.readyForBreakthrough || adaptation.mode === 'hot_streak') && climbCount <= 7 && totalTries <= 14) {
+            const targetIdx = Math.min(GRADES.length - 1, maxGradeIdx + 1);
+            const strongTags = selectStylePair(styleProfile.strongStyles.concat(['powerful', 'crimp', 'sloper']), false);
+            return {
+                stage: 'breakthrough',
+                category: 'Breakthrough Project',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: strongTags,
+                title: `Breakthrough Window (${GRADES[targetIdx]})`,
+                advice: `${adaptation.reason || readiness.verdict} Pick a ${strongTags.join('/')} line that suits your strengths and give 3–5 min rest per burn.`,
+                icon: '🚀'
+            };
+        }
+
+        // 6C: Alternate between Peak Project (Strengths) and Sub-Max Weakness Builder every few climbs
+        const isWeaknessSlot = ((climbCount + altIndex) % 3 === 1);
+        if (isWeaknessSlot) {
+            const targetIdx = Math.max(0, maxGradeIdx - 1);
+            const weakTags = selectStylePair(styleProfile.weakStyles, true);
+            return {
+                stage: 'weakness_target',
+                category: 'Style Expansion',
+                targetGradeStr: GRADES[targetIdx],
+                targetGradeIdx: targetIdx,
+                targetTags: weakTags,
+                title: `Anti-Style Drill (${weakTags[0] || 'technical'})`,
+                advice: `Your historical send rate on ${weakTags.join('/')} is lower than your peak styles. Aim for a clean send within 2 tries.`,
+                icon: '🧭'
+            };
+        }
+
+        // 6D: Standard Peak Project Window
+        const targetIdx = Math.min(GRADES.length - 1, Math.max(0, maxGradeIdx + adaptation.gradeDelta));
+        const projTags = selectStylePair(['crimp', 'powerful', 'sloper', 'board', 'pinch', 'dyno'], false);
+        return {
+            stage: 'project',
+            category: 'Peak Project',
+            targetGradeStr: GRADES[targetIdx],
+            targetGradeIdx: targetIdx,
+            targetTags: projTags,
+            title: 'Limit Project Window',
+            advice: `Peak CNS window. Commit 100% on ${projTags.join(' + ')} movement with full 3–5 min ATP-CP recovery between attempts.`,
+            icon: '🎯'
+        };
+    }
+
+    // ------------------------------------------------------------------------
+    // 8. LIVE INTRA-SESSION FATIGUE / CUTOFF EVALUATOR
+    // ------------------------------------------------------------------------
+    function evaluateLiveFatigue(activeClimbs, sessionElapsedSeconds) {
+        const climbs = normalizeChronological(activeClimbs);
+        if (!climbs || climbs.length < 3) {
+            return { fatigueDetected: false, alertMessage: null };
+        }
+
+        // Check the 3 MOST RECENT climbs in chronological order
+        const recentThree = climbs.slice(-3);
+        const consecutiveProjectFails = recentThree.every(c => !isSend(c) && (c.statusText === 'Project' || (c.tries || 1) >= 3));
+
+        if (consecutiveProjectFails) {
+            return {
+                fatigueDetected: true,
+                severity: 'warning',
+                alertMessage: '⚠️ Rule of 3 Triggered: 3 consecutive failed project blocks. Neuromuscular power has dropped—switch to sub-max flow or wrap up to protect pulleys.'
+            };
+        }
+
+        const checkin = loadCheckin();
+        const elapsedMinutes = Math.round((sessionElapsedSeconds || 0) / 60);
+        const warnTime = Math.round((checkin.time || 90) * 0.85);
+
+        if (elapsedMinutes >= warnTime) {
+            const recentPointsPerTry = recentThree.reduce((sum, c) => sum + ((c.points || 0) / Math.max(1, c.tries || 1)), 0) / 3;
+
+            if (recentPointsPerTry < 4.0 && elapsedMinutes >= (checkin.time || 90)) {
+                return {
+                    fatigueDetected: true,
+                    severity: 'critical',
+                    alertMessage: `🛑 Session Fatigue Warning: ${elapsedMinutes}m elapsed with dropping attempt efficiency. Further limit burns create junk volume and spike pulley injury risk.`
+                };
+            }
+        }
+
+        return { fatigueDetected: false, alertMessage: null };
     }
 
     return {
         GRADES,
         STYLE_STRESS,
+        ALL_STYLES,
         WORKOUT_PRESETS,
         getWorkoutPresets: () => WORKOUT_PRESETS,
         getWorkoutPreset: (id) => WORKOUT_PRESETS.find(p => p.id === id),
+        setCheckin,
+        getCheckin,
         resolveMaxGradeIdx,
+        calculateClimbLoad,
         calculateSessionLoad,
         computeWorkloadMetrics,
         computeTendonRecovery,
+        computeStyleProfile,
         computeGradeReadiness,
         generateDailyPlan,
         getTodayPlan,
-        evaluateLiveFatigue,
         evaluateIntraSessionAdaptation,
+        recommendNextClimb,
+        evaluateLiveFatigue,
         recordFeedback,
-        setCheckin,
-        getCheckin
+        normalizeChronological
     };
 })();
 
-// Global renderer for the Planner UI in index.html
+// Sync Session Check-in and Coach Recommendation UI
 function renderPlannerUI() {
     try {
-        const history = JSON.parse(localStorage.getItem('boulderHistory')) || [];
-        const maxGradeIdx = Planner.resolveMaxGradeIdx(history);
-        const plan = Planner.generateDailyPlan(history, maxGradeIdx);
-        const checkin = Planner.getCheckin();
-
-        // 1. Readiness Battery & Score
-        const readinessEl = document.getElementById('plannerReadinessScore');
-        const readinessGauge = document.getElementById('plannerReadinessGauge');
-        const readinessTitle = document.getElementById('plannerReadinessTitle');
-        const readinessDesc = document.getElementById('plannerReadinessDesc');
-
-        if (readinessEl) readinessEl.innerText = `${plan.compositeScore}%`;
-        if (readinessGauge) {
-            readinessGauge.style.width = `${plan.compositeScore}%`;
-            readinessGauge.className = `h-full rounded-full transition-all duration-500 ${
-                plan.compositeScore >= 75 ? 'bg-emerald-500' : plan.compositeScore >= 50 ? 'bg-amber-500' : 'bg-red-500'
-            }`;
+        if (typeof renderSessionCheckinUI === 'function') {
+            renderSessionCheckinUI();
         }
-        if (readinessTitle) readinessTitle.innerText = plan.title;
-        if (readinessDesc) readinessDesc.innerText = plan.rationale;
-
-        // 2. Metrics Cards: ACWR & Tendons
-        const acwrVal = document.getElementById('plannerACWRVal');
-        const acwrBadge = document.getElementById('plannerACWRBadge');
-        if (acwrVal) acwrVal.innerText = plan.workload.acwr;
-        if (acwrBadge) {
-            acwrBadge.innerText = plan.workload.statusText;
-            acwrBadge.className = `text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                plan.workload.statusCategory === 'sweet_spot' ? 'bg-emerald-500/20 text-emerald-400' :
-                plan.workload.statusCategory === 'elevated' ? 'bg-amber-500/20 text-amber-400' :
-                plan.workload.statusCategory === 'high_risk' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
-            }`;
+        if (typeof updateCoachRecommendation === 'function') {
+            updateCoachRecommendation();
         }
-
-        const tendonVal = document.getElementById('plannerTendonVal');
-        const tendonBadge = document.getElementById('plannerTendonBadge');
-        const tendonDesc = document.getElementById('plannerTendonDesc');
-        if (tendonVal) tendonVal.innerText = `${plan.tendon.recoveryPct}%`;
-        if (tendonBadge) {
-            tendonBadge.innerText = plan.tendon.status;
-            tendonBadge.className = `text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                plan.tendon.recoveryPct >= 90 ? 'bg-emerald-500/20 text-emerald-400' :
-                plan.tendon.recoveryPct >= 60 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'
-            }`;
-        }
-        if (tendonDesc) tendonDesc.innerText = plan.tendon.advice;
-
-        // 3. Today's Structured Session Blueprint Phases
-        const phasesContainer = document.getElementById('plannerPhasesList');
-        if (phasesContainer) {
-            phasesContainer.innerHTML = plan.phases.map((p, idx) => `
-                <div class="flex items-start gap-3 bg-neutral-900/70 p-3 rounded-2xl border border-neutral-800">
-                    <span class="w-6 h-6 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-black text-neutral-400 shrink-0 mt-0.5">${idx + 1}</span>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between gap-2">
-                            <p class="text-xs font-bold text-white">${p.name}</p>
-                            ${p.targetGradeStr ? `<span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 shrink-0">Target: ${p.targetGradeStr}</span>` : ''}
-                        </div>
-                        <p class="text-[11px] text-neutral-400 leading-snug mt-0.5">${p.desc}</p>
-                        ${p.targetTags && p.targetTags.length > 0 ? `
-                        <div class="flex gap-1 mt-1.5 flex-wrap">
-                            ${p.targetTags.map(t => `<span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">${t}</span>`).join('')}
-                        </div>` : ''}
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        // Update Today's Coach Card in Session Tab
-        const scTitle = document.getElementById('sessionCardCoachTitle');
-        const scSub = document.getElementById('sessionCardCoachSubtitle');
-        if (scTitle) scTitle.innerText = plan.title;
-        if (scSub) {
-            const firstTarget = plan.phases.find(p => p.targetGradeStr);
-            const gradeInfo = firstTarget ? ` · Target ${firstTarget.targetGradeStr}` : '';
-            scSub.innerText = `${plan.phases.length} Guided Phases${gradeInfo} · Tap to start`;
-        }
-
-        // Target / Forbidden Tags
-        const tagsContainer = document.getElementById('plannerTargetTags');
-        if (tagsContainer) {
-            let html = '';
-            if (plan.targetTags.length > 0) {
-                html += plan.targetTags.map(t => `<span class="px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-wider">${t}</span>`).join('');
-            }
-            if (plan.forbiddenTags.length > 0) {
-                html += plan.forbiddenTags.map(t => `<span class="px-2 py-1 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-[9px] font-black uppercase tracking-wider line-through">NO ${t}</span>`).join('');
-            }
-            tagsContainer.innerHTML = html || '<span class="text-neutral-500 text-[10px]">All movement styles fine</span>';
-        }
-
-        // Exit Rule
-        const exitRuleEl = document.getElementById('plannerExitRule');
-        if (exitRuleEl) exitRuleEl.innerText = plan.exitRule;
-
-        // 4. Grade Breakthrough Meter
-        const gr = plan.gradeReadiness;
-        const grScore = document.getElementById('plannerGradeReadinessScore');
-        const grTarget = document.getElementById('plannerGradeTarget');
-        const grBar = document.getElementById('plannerGradeBar');
-        const grVerdict = document.getElementById('plannerGradeVerdict');
-        const grPyramid = document.getElementById('plannerGradePyramid');
-        const grFlash = document.getElementById('plannerGradeFlash');
-
-        if (grScore) grScore.innerText = `${gr.readinessPct}%`;
-        if (grTarget) grTarget.innerText = gr.targetGrade;
-        if (grBar) {
-            grBar.style.width = `${gr.readinessPct}%`;
-            grBar.className = `h-full rounded-full transition-all duration-500 ${gr.readyForBreakthrough ? 'bg-emerald-400' : 'bg-blue-400'}`;
-        }
-        if (grVerdict) grVerdict.innerText = gr.verdict;
-        if (grPyramid) grPyramid.innerText = `${gr.pyramidSends} / ${gr.pyramidTarget} sends at ${gr.currentMaxGrade}`;
-        if (grFlash) grFlash.innerText = `${gr.flashRateSubMax}% flash rate at ${Planner.GRADES[Math.max(0, maxGradeIdx - 1)]}`;
-
-        // 5. Update Context Checkin UI buttons state
-        ['fresh', 'stiff', 'tweaky'].forEach(f => {
-            const btn = document.getElementById(`checkin-finger-${f}`);
-            if (btn) {
-                if (checkin.fingers === f) {
-                    btn.classList.replace('bg-neutral-900', f === 'tweaky' ? 'bg-red-500/30' : 'bg-emerald-500/30');
-                    btn.classList.replace('text-neutral-400', f === 'tweaky' ? 'text-red-400' : 'text-emerald-400');
-                    btn.classList.add(f === 'tweaky' ? 'border-red-500/50' : 'border-emerald-500/50');
-                } else {
-                    btn.classList.remove('bg-emerald-500/30', 'bg-red-500/30', 'text-emerald-400', 'text-red-400', 'border-emerald-500/50', 'border-red-500/50');
-                    btn.classList.add('bg-neutral-900', 'text-neutral-400');
-                }
-            }
-        });
-
-        [45, 90, 120].forEach(t => {
-            const btn = document.getElementById(`checkin-time-${t}`);
-            if (btn) {
-                if (checkin.time === t) {
-                    btn.classList.replace('bg-neutral-900', 'bg-emerald-500/30');
-                    btn.classList.replace('text-neutral-400', 'text-emerald-400');
-                    btn.classList.add('border-emerald-500/50');
-                } else {
-                    btn.classList.remove('bg-emerald-500/30', 'text-emerald-400', 'border-emerald-500/50');
-                    btn.classList.add('bg-neutral-900', 'text-neutral-400');
-                }
-            }
-        });
-
-        // 6. Render Off-Wall Workout Presets Library
-        const presetsContainer = document.getElementById('plannerWorkoutPresetsList');
-        if (presetsContainer) {
-            const presets = Planner.getWorkoutPresets();
-            presetsContainer.innerHTML = presets.map(p => `
-                <div class="bg-neutral-900/80 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-sm hover:border-neutral-700 transition-all">
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex items-center gap-3">
-                            <span class="text-2xl">${p.icon}</span>
-                            <div>
-                                <h4 class="text-xs font-black text-white leading-tight">${p.name}</h4>
-                                <div class="flex items-center gap-1.5 mt-0.5">
-                                    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 uppercase">${p.badge}</span>
-                                    <span class="text-neutral-700 text-[8px]">●</span>
-                                    <span class="text-[9px] text-neutral-400 font-bold">${p.durationMinutes}m</span>
-                                    <span class="text-neutral-700 text-[8px]">●</span>
-                                    <span class="text-[9px] text-emerald-400 font-bold">${p.exercises.length} Exercises</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="text-[11px] text-neutral-400 leading-snug">${p.desc}</p>
-                    <button onclick="startPresetWorkout('${p.id}')" class="w-full py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-emerald-500/20 text-neutral-200 hover:text-emerald-400 border border-neutral-700 hover:border-emerald-500/40 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-95 transition-all">
-                        <span>💪</span>
-                        <span>Start Workout</span>
-                    </button>
-                </div>
-            `).join('');
-        }
-
     } catch (e) {
-        console.error('renderPlannerUI error:', e);
+        console.error('renderPlannerUI sync error:', e);
     }
 }
 
 // User check-in handler from UI
 function setPlannerCheckin(key, value) {
-    Planner.setCheckin(key, value);
+    if (typeof Planner !== 'undefined' && typeof Planner.setCheckin === 'function') {
+        Planner.setCheckin(key, value);
+    }
     renderPlannerUI();
 }
 

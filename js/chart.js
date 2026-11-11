@@ -21,15 +21,15 @@
         function computeMovingAverage(data, windowSize = 3) {
             const result = [];
             for (let i = 0; i < data.length; i++) {
-                const window = [];
+                const windowSlice = [];
                 for (let j = Math.max(0, i - windowSize + 1); j <= i; j++) {
                     if (data[j] !== null && data[j] !== undefined) {
-                        window.push(data[j]);
+                        windowSlice.push(data[j]);
                     }
                 }
-                if (window.length > 0) {
-                    const sum = window.reduce((a, b) => a + b, 0);
-                    result.push(Math.round((sum / window.length) * 10) / 10);
+                if (windowSlice.length > 0) {
+                    const sum = windowSlice.reduce((a, b) => a + b, 0);
+                    result.push(Math.round((sum / windowSlice.length) * 10) / 10);
                 } else {
                     result.push(data[i]);
                 }
@@ -1020,12 +1020,22 @@
                 : climbs.map(c => {
                     const statusColor = c.statusText === 'Flash' ? 'text-amber-400' : c.statusText === 'Top' ? 'text-blue-400' : 'text-neutral-400';
                     const bgColor = c.statusText === 'Flash' ? 'bg-amber-500/10 border-amber-500/20' : c.statusText === 'Top' ? 'bg-blue-500/10 border-blue-500/20' : 'bg-neutral-800/30 border-neutral-700/30';
+                    const hex = c.colorHex || (c.colorTag ? (c.colorTag === 'red' ? '#ef4444' : c.colorTag === 'blue' ? '#3b82f6' : c.colorTag === 'yellow' ? '#eab308' : c.colorTag === 'green' ? '#10b981' : c.colorTag === 'black' ? '#171717' : c.colorTag === 'white' ? '#f5f5f5' : c.colorTag === 'orange' ? '#f97316' : c.colorTag === 'purple' ? '#a855f7' : c.colorTag === 'pink' ? '#ec4899' : '#737373') : null);
+                    const colorDotHtml = hex ? `<span class="w-3 h-3 rounded-full shrink-0 inline-block border border-neutral-700 shadow-sm" style="background-color: ${hex};"></span>` : '';
+                    const compHtml = (c.completionPct !== undefined && c.completionPct !== null && c.statusText === 'Project') ? `<span class="text-[9px] text-neutral-400 font-bold"> · ${c.completionPct}% complete</span>` : '';
+
                     return `
                     <li class="flex justify-between items-center p-2.5 ${bgColor} rounded-xl border">
                         <div class="flex items-center gap-3">
-                            <span class="text-lg font-black w-10 text-center leading-tight">${c.gradeStr}</span>
+                            <div class="flex items-center gap-1.5 w-12 justify-center">
+                                ${colorDotHtml}
+                                <span class="text-lg font-black leading-tight">${c.gradeStr}</span>
+                            </div>
                             <div class="flex flex-col">
-                                <span class="${statusColor} text-[11px] font-bold uppercase tracking-wider">${c.statusText}</span>
+                                <div class="flex items-center">
+                                    <span class="${statusColor} text-[11px] font-bold uppercase tracking-wider">${c.statusText}</span>
+                                    ${compHtml}
+                                </div>
                                 <span class="text-neutral-500 text-[9px]">${c.tries} Attempt${c.tries > 1 ? 's' : ''}</span>
                                 ${c.tags && c.tags.length > 0 ? `<div class="flex gap-1 mt-1 flex-wrap">${c.tags.map(t => `<span class="bg-neutral-800 text-neutral-400 border border-neutral-700 text-[8px] uppercase px-1.5 py-0.5 rounded">${t}</span>`).join('')}</div>` : ''}
                             </div>
@@ -1123,12 +1133,22 @@
             listEl.innerHTML = tempEditSession.climbs.map((c, idx) => {
                 const statusColor = c.statusText === 'Flash' ? 'text-amber-400' : c.statusText === 'Top' ? 'text-blue-400' : 'text-neutral-400';
                 const bgColor = c.statusText === 'Flash' ? 'bg-amber-500/10 border-amber-500/20' : c.statusText === 'Top' ? 'bg-blue-500/10 border-blue-500/20' : 'bg-neutral-800/30 border-neutral-700/30';
+                const hex = c.colorHex || (c.colorTag ? (c.colorTag === 'red' ? '#ef4444' : c.colorTag === 'blue' ? '#3b82f6' : c.colorTag === 'yellow' ? '#eab308' : c.colorTag === 'green' ? '#10b981' : c.colorTag === 'black' ? '#171717' : c.colorTag === 'white' ? '#f5f5f5' : c.colorTag === 'orange' ? '#f97316' : c.colorTag === 'purple' ? '#a855f7' : c.colorTag === 'pink' ? '#ec4899' : '#737373') : null);
+                const colorDotHtml = hex ? `<span class="w-2.5 h-2.5 rounded-full shrink-0 inline-block border border-neutral-700 shadow-sm" style="background-color: ${hex};"></span>` : '';
+                const compHtml = (c.completionPct !== undefined && c.completionPct !== null && c.statusText === 'Project') ? `<span class="text-[8px] text-neutral-400 font-bold"> · ${c.completionPct}%</span>` : '';
+
                 return `
                 <li class="flex justify-between items-center p-2.5 ${bgColor} rounded-xl border border-neutral-800">
                     <div class="flex items-center gap-3">
-                        <span class="text-base font-black w-8 text-center leading-tight">${c.gradeStr}</span>
+                        <div class="flex items-center gap-1 w-10 justify-center">
+                            ${colorDotHtml}
+                            <span class="text-base font-black leading-tight">${c.gradeStr}</span>
+                        </div>
                         <div class="flex flex-col">
-                            <span class="${statusColor} text-[10px] font-bold uppercase tracking-wider">${c.statusText}</span>
+                            <div class="flex items-center">
+                                <span class="${statusColor} text-[10px] font-bold uppercase tracking-wider">${c.statusText}</span>
+                                ${compHtml}
+                            </div>
                             <span class="text-neutral-500 text-[8px]">${c.tries} Attempt${c.tries > 1 ? 's' : ''}</span>
                         </div>
                     </div>
@@ -1485,6 +1505,8 @@
                 }
             } catch (e) { }
         }
+        window.initAudio = initAudio;
+        window.getAudioContext = () => audioCtx;
 
         // Pre-initialize audio engine on first interaction to remove latency
         function primeAudio() {

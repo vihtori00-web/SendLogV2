@@ -1,4 +1,4 @@
-        const APP_VERSION = 'v2.0.0';
+        const APP_VERSION = 'v2.2.0';
 
         // =============================================
         // EARLY OAUTH REDIRECT INTERCEPTOR
@@ -44,19 +44,64 @@
         };
 
         function toggleSessionButtonUI(isActive) {
-            if (!DOM.sessionBtn) return;
-            if (isActive) {
-                DOM.sessionBtn.innerText = "FINISH";
-                DOM.sessionBtn.classList.replace('bg-emerald-500/20', 'bg-red-500/20');
-                DOM.sessionBtn.classList.replace('text-emerald-400', 'text-red-400');
-                DOM.sessionBtn.classList.replace('border-emerald-500/30', 'border-red-500/30');
-            } else {
-                DOM.sessionBtn.innerText = "START";
-                DOM.sessionBtn.classList.replace('bg-red-500/20', 'bg-emerald-500/20');
-                DOM.sessionBtn.classList.replace('text-red-400', 'text-emerald-400');
-                DOM.sessionBtn.classList.replace('border-red-500/30', 'border-emerald-500/30');
+            const btn = document.getElementById('btnSessionAction');
+            if (btn) {
+                if (isActive) {
+                    btn.innerHTML = '<span>⏹</span><span>FINISH SESSION</span>';
+                    btn.className = 'w-full mt-1.5 py-1.5 px-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm';
+                } else {
+                    btn.innerHTML = '<span>▶</span><span>START SESSION</span>';
+                    btn.className = 'w-full mt-1.5 py-1.5 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm';
+                }
+            }
+            const mainAddLabel = document.getElementById('btnMainAddLabel');
+            if (mainAddLabel) {
+                mainAddLabel.innerText = isActive ? '+ Add Climb / Workout' : 'Start Session / Add Climb';
+            }
+            updateSessionMetrics();
+        }
+
+        function handleMainAddClick() {
+            if (!sessionStartTime) {
+                startSession();
+            }
+            openAddModal('climb');
+        }
+        window.handleMainAddClick = handleMainAddClick;
+
+        function updateSessionMetrics() {
+            const sendsEl = document.getElementById('sessionSendsCount');
+            const burnsEl = document.getElementById('sessionBurnsCount');
+            const loadEl = document.getElementById('sessionLoadDisplay');
+            const statusDot = document.getElementById('sessionStatusDot');
+            const statusText = document.getElementById('sessionStatusText');
+
+            const totalBurns = (sessionClimbs || []).reduce((acc, c) => acc + (c.tries || 1), 0);
+            const totalSends = (sessionClimbs || []).filter(c => c.isTop || c.isFlash || c.statusText === 'Top' || c.statusText === 'Flash' || c.completionPct === 100).length;
+
+            if (sendsEl) sendsEl.innerText = totalSends;
+            if (burnsEl) burnsEl.innerText = totalBurns;
+
+            if (loadEl) {
+                const load = (typeof Planner !== 'undefined' && typeof Planner.calculateSessionLoad === 'function')
+                    ? Math.round(Planner.calculateSessionLoad({ climbs: sessionClimbs, workouts: sessionWorkouts }, maxGradeIndex))
+                    : 0;
+                loadEl.innerText = `${load} TL`;
+            }
+
+            if (statusDot && statusText) {
+                if (sessionStartTime) {
+                    statusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping';
+                    statusText.innerText = 'Live';
+                    statusText.className = 'text-emerald-400 font-bold';
+                } else {
+                    statusDot.className = 'w-1.5 h-1.5 rounded-full bg-neutral-500';
+                    statusText.innerText = 'Ready';
+                    statusText.className = 'text-neutral-400 font-bold';
+                }
             }
         }
+        window.updateSessionMetrics = updateSessionMetrics;
 
         const fontGrades = [
             '<4', '4', '4+', '5', '5+', '6A', '6A+', '6B', '6B+',
@@ -98,7 +143,17 @@
             return 7; // Default 6B
         }
 
-        let boulderHistory = JSON.parse(localStorage.getItem('boulderHistory')) || [];
+        function safeJsonParse(str, fallback) {
+            if (!str) return fallback;
+            try {
+                return JSON.parse(str);
+            } catch (e) {
+                console.warn("safeJsonParse fallback used:", e);
+                return fallback;
+            }
+        }
+
+        let boulderHistory = safeJsonParse(localStorage.getItem('boulderHistory'), []);
         let maxGradeIndex = resolveMaxGradeIndex(boulderHistory);
         let currentGradeIndex = maxGradeIndex;
         let tries = 1;
@@ -116,24 +171,6 @@
         window.historyViewMode = 'ALL';
         var historyViewMode = 'ALL';
         
-        // Coach Guided Workout state variables
-        let trainingActive = false;
-        let coachPhaseIndex = 0;
-        let coachPlan = null;
-        let coachRestTimerInterval = null;
-        let coachRestRemaining = 0;
-        let coachRestTargetSec = 120;
-        // Legacy stubs for safe backwards compatibility
-        let trainingState = 'climb';
-        let trainingCurrentGradeIndex = 0;
-        let trainingStartGradeIndex = 0;
-        let trainingFocus = 'best';
-        let trainingTimerEndEpoch = 0;
-        let trainingRung = 1;
-        let trainingConfigGradeIndex = 0;
-        let trainingFocusTags = [];
-        let trainingTimerInterval = null;
-        
         let tagsMigrated = false;
         boulderHistory.forEach(s => {
             if (s.climbs) {
@@ -150,7 +187,7 @@
             localStorage.setItem('boulderHistory', JSON.stringify(boulderHistory));
         }
 
-        let boulderActiveSession = JSON.parse(localStorage.getItem('boulderActiveSession'));
+        let boulderActiveSession = safeJsonParse(localStorage.getItem('boulderActiveSession'), null);
         if (boulderActiveSession) {
             let activeMigrated = false;
             (boulderActiveSession.climbs || []).forEach(c => {
@@ -481,7 +518,7 @@
             { id: "sixty_seven", name: "The 67 Beers", desc: "Beat the secret minigame.", icon: "🍺" }
         ];
 
-        let achievementsUnlocked = JSON.parse(localStorage.getItem('boulderAchievements')) || [];
+        let achievementsUnlocked = safeJsonParse(localStorage.getItem('boulderAchievements'), []);
 
         function renderAchievements() {
             const list = document.getElementById('achievementsList');
@@ -555,7 +592,9 @@
                         localStorage.setItem('boulderHistory', JSON.stringify(data.history));
                         boulderHistory = data.history;
                     }
-                    if (data.maxGradeIndex !== undefined) localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
+                    if (data.maxGradeIndex !== undefined && data.maxGradeIndex !== null && data.maxGradeIndex !== 'null') {
+                        localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
+                    }
                     if (data.playerName) localStorage.setItem('boulderPlayerName', data.playerName);
                     if (data.achievements) localStorage.setItem('boulderAchievements', JSON.stringify(data.achievements));
                     if (data.calibration) localStorage.setItem('sendlog_v2_calibration', JSON.stringify(data.calibration));
@@ -622,20 +661,7 @@
                     sessionWorkouts,
                     activeLogMode,
                     activeWorkoutPreset,
-                    activeWorkoutExIndex,
-                    // Coach workout state persistence
-                    trainingActive,
-                    coachPhaseIndex,
-                    coachPlan,
-                    // Backward-compatible fields
-                    trainingState,
-                    trainingCurrentGradeIndex,
-                    trainingStartGradeIndex,
-                    trainingFocus,
-                    trainingTimerEndEpoch,
-                    trainingRung,
-                    trainingConfigGradeIndex,
-                    trainingFocusTags
+                    activeWorkoutExIndex
                 };
                 localStorage.setItem('boulderActiveSession', JSON.stringify(activeSession));
             } catch (e) {
@@ -669,16 +695,6 @@
                         sessionTimerInterval = setInterval(updateSessionTimer, 1000);
                         updateSessionTimer();
                         toggleSessionButtonUI(true);
-                    }
-
-                    // Restore training / coach state if any
-                    if (active.trainingActive) {
-                        trainingActive = true;
-                        coachPhaseIndex = active.coachPhaseIndex || 0;
-                        coachPlan = active.coachPlan || (typeof Planner !== 'undefined' ? Planner.getTodayPlan() : null);
-                        trainingState = active.trainingState || 'climb';
-                        trainingCurrentGradeIndex = active.trainingCurrentGradeIndex || 0;
-                        restoreTrainingUI();
                     }
 
                     // Reconcile hang properties for restored workout presets from localStorage
@@ -725,7 +741,16 @@
                         renderWorkoutHUD();
                     }
 
+                    sessionClimbs.forEach(c => {
+                        if (!c.colorTag) c.colorTag = 'red';
+                        if (!c.colorHex && typeof getColorObj === 'function') c.colorHex = getColorObj(c.colorTag).hex;
+                        if (c.completionPct === undefined) {
+                            c.completionPct = (c.isTop || c.isFlash || c.statusText === 'Top' || c.statusText === 'Flash') ? 100 : 0;
+                        }
+                    });
+
                     renderSessionList();
+                    if (typeof updateCoachRecommendation === 'function') updateCoachRecommendation();
                     updateAnalytics();
                 }
             } catch (e) {
@@ -772,7 +797,7 @@
         renderMaxGradeSelect();
         renderTags();
 
-        elGrade.innerText = fontGrades[currentGradeIndex];
+        if (elGrade) elGrade.innerText = fontGrades[currentGradeIndex];
         updateUI();
         updateSubmitButtonLabel();
 
@@ -780,7 +805,7 @@
         function adjGrade(dir) {
             if ('vibrate' in navigator) navigator.vibrate(15);
             currentGradeIndex = Math.max(0, Math.min(fontGrades.length - 1, currentGradeIndex + dir));
-            elGrade.innerText = fontGrades[currentGradeIndex];
+            if (elGrade) elGrade.innerText = fontGrades[currentGradeIndex];
             checkIntraSessionAdaptation();
         }
 
@@ -801,14 +826,8 @@
                 isFlash = false;
             }
 
-            // Automatically trigger coach rest timer when resting between burns
-            if (trainingActive) {
-                const isRunning = typeof window.isRestTimerRunning === 'function'
-                    ? window.isRestTimerRunning()
-                    : (coachRestTimerInterval !== null);
-                if (!isRunning) {
-                    toggleCoachRestTimer();
-                }
+            if (typeof startRestTimer === 'function') {
+                startRestTimer();
             }
 
             updateUI();
@@ -2014,6 +2033,7 @@
             sessionScore = climbPts + workoutPts;
             const scoreEl = document.getElementById('sessionScoreDisplay');
             if (scoreEl) scoreEl.innerText = sessionScore;
+            updateSessionMetrics();
             return sessionScore;
         }
         window.recomputeSessionScore = recomputeSessionScore;
@@ -2024,21 +2044,24 @@
         const topBonusMap = [3, 5, 8, 12, 22, 35, 55, 80];
         const flashBonusMap = [2, 3, 5, 8, 15, 25, 40, 60];
 
-        function calculatePoints(delta, flashed, topped, attempts) {
+        function calculatePoints(delta, flashed, topped, attempts, completionPct = 0) {
             // Points mapping based on difficulty relative to max grade (delta)
             // Indices: -Infinity..-5, -4, -3, -2, -1, 0, 1, 2+
             const getMapValue = (valArray, d) => {
                 const idx = d <= -5 ? 0 : d >= 2 ? 7 : d + 5;
                 return valArray[idx];
             };
-
             const tryPts = getMapValue(tryPtsMap, delta);
             const topBonus = getMapValue(topBonusMap, delta);
             const flashBonus = getMapValue(flashBonusMap, delta);
 
             if (flashed) return tryPts + topBonus + flashBonus;
             if (topped)  return (attempts * tryPts) + topBonus;
-            return Math.min(attempts, 8) * tryPts;
+            
+            // Project points with partial completion bonus
+            const basePts = Math.min(attempts, 8) * tryPts;
+            const progressBonus = Math.round(topBonus * (completionPct / 100) * 0.4);
+            return basePts + progressBonus;
         }
 
         function logClimb() {
@@ -2062,18 +2085,21 @@
 
                 if (currentGradeIndex > maxGradeIndex) {
                     maxGradeIndex = currentGradeIndex;
-                    selectMax.value = maxGradeIndex;
+                    const selectMax = document.getElementById('vMax');
+                    if (selectMax) selectMax.value = maxGradeIndex;
                     localStorage.setItem('boulderMaxGradeIndex', maxGradeIndex);
                     
                     // Cool animation for new max grade
                     if (typeof confetti === 'function') {
                         confetti({ particleCount: 300, spread: 160, origin: { y: 0.5 }, startVelocity: 45, colors: ['#ff0000', '#00ff00', '#3b82f6', '#fbbf24', '#10b981'] });
                     }
-                    const displayGradeEl = document.getElementById('displayGrade');
-                    displayGradeEl.classList.add('scale-150', 'text-amber-400', 'drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]');
-                    setTimeout(() => {
-                        displayGradeEl.classList.remove('scale-150', 'text-amber-400', 'drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]');
-                    }, 1200);
+                    const displayGradeEl = document.getElementById('displayGrade') || document.getElementById('modalDisplayGrade');
+                    if (displayGradeEl) {
+                        displayGradeEl.classList.add('scale-150', 'text-amber-400', 'drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]');
+                        setTimeout(() => {
+                            displayGradeEl.classList.remove('scale-150', 'text-amber-400', 'drop-shadow-[0_0_20px_rgba(251,191,36,0.8)]');
+                        }, 1200);
+                    }
                 } else if (delta === 0) {
                     if (typeof confetti === 'function') {
                         confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 }, colors: ['#10b981'] });
@@ -2086,17 +2112,12 @@
             const now = new Date();
             const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
 
-            const currentPhase = (trainingActive && coachPlan && coachPlan.phases)
-                ? coachPlan.phases[coachPhaseIndex]
-                : null;
-
             sessionClimbs.unshift({
                 id: climbIdCounter++,
                 gradeStr: fontGrades[currentGradeIndex],
                 statusText, color, tries, points,
                 time: timeStr,
-                tags: [...selectedTags],
-                ...(currentPhase && { phaseName: currentPhase.title || currentPhase.name })
+                tags: [...selectedTags]
             });
 
             if (!sessionStartTime) {
@@ -2118,13 +2139,17 @@
             saveActiveSession();
             checkLiveFatigueAlert();
             checkIntraSessionAdaptation();
-            btnSubmit.innerText = `+${points} ADDED`;
-            btnSubmit.classList.add('bg-emerald-400', 'text-black', 'border-emerald-400');
+            if (btnSubmit) {
+                btnSubmit.innerText = `+${points} ADDED`;
+                btnSubmit.classList.add('bg-emerald-400', 'text-black', 'border-emerald-400');
 
-            setTimeout(() => {
-                btnSubmit.classList.remove('bg-emerald-400', 'text-black', 'border-emerald-400');
-                updateSubmitButtonLabel();
-            }, 800);
+                setTimeout(() => {
+                    btnSubmit.classList.remove('bg-emerald-400', 'text-black', 'border-emerald-400');
+                    updateSubmitButtonLabel();
+                }, 800);
+            }
+
+            const wasSend = (isTop || isFlash);
 
             selectedTags = [];
             tries = 1;
@@ -2135,71 +2160,1196 @@
             flashManuallyDisabled = false;
             updateUI();
             renderTags();
+        }
 
-            // Training Mode: check if this climb completes a rung
-            if (trainingActive && trainingState === 'climb'
-                && currentGradeIndex === trainingCurrentGradeIndex
-                && (isTop || isFlash)) {
-                handleTrainingRungComplete();
+        // ============================================================================
+        // COLOR PALETTE & GYM PRESETS
+        // ============================================================================
+        const COLOR_PALETTE = [
+            { id: 'red', name: 'Red', hex: '#ef4444', border: '#b91c1c' },
+            { id: 'blue', name: 'Blue', hex: '#3b82f6', border: '#1d4ed8' },
+            { id: 'yellow', name: 'Yellow', hex: '#eab308', border: '#a16207' },
+            { id: 'green', name: 'Green', hex: '#10b981', border: '#047857' },
+            { id: 'black', name: 'Black', hex: '#171717', border: '#525252' },
+            { id: 'white', name: 'White', hex: '#f5f5f5', border: '#a3a3a3' },
+            { id: 'orange', name: 'Orange', hex: '#f97316', border: '#c2410c' },
+            { id: 'purple', name: 'Purple', hex: '#a855f7', border: '#7e22ce' },
+            { id: 'pink', name: 'Pink', hex: '#ec4899', border: '#be185d' },
+            { id: 'grey', name: 'Grey', hex: '#737373', border: '#404040' }
+        ];
+
+        function getColorObj(id) {
+            return COLOR_PALETTE.find(c => c.id === id) || COLOR_PALETTE[0];
+        }
+
+        // ============================================================================
+        // MODAL STATE & CONTROLLER (CLIMB & WORKOUT ADD / EDIT)
+        // ============================================================================
+        let modalMode = 'climb'; // 'climb' | 'workout'
+        let modalAction = 'add'; // 'add' | 'edit'
+        let editingRouteId = null;
+        let editingWorkoutId = null;
+        let modalGradeIndex = 5; // default 6A
+        let modalColorTag = 'red';
+        let modalSelectedTags = [];
+        let modalTries = 1;
+        let modalCompletion = 0;
+
+        let modalWorkoutPresetId = 'bench_press';
+        let modalWorkoutWeight = 60;
+        let modalWorkoutReps = 6;
+        let modalWorkoutSets = [false, false, false, false];
+
+        const WORKOUT_PRESET_ITEMS = [
+            { id: 'bench_press', name: 'Barbell Bench Press', icon: '🏋️', badge: 'Strength', trackWeight: true, defaultWeight: 60, defaultReps: 6, repsUnit: 'reps', sets: 4, desc: 'Touch chest with control, drive upward with active scapular retraction.' },
+            { id: 'max_hangs', name: 'Max Hangs', icon: '🧗', badge: 'Max Recruitment', trackWeight: true, defaultWeight: 0, defaultReps: 1, repsUnit: 'hang', sets: 5, desc: '10s maximum hang on 20mm edge with 3m rest.' },
+            { id: 'repeaters_7_3', name: '7:3 Repeaters', icon: '⚡', badge: 'Finger Endurance', trackWeight: false, defaultWeight: 0, defaultReps: 6, repsUnit: 'reps', sets: 4, desc: '7 seconds on / 3 seconds off repeaters on 20mm edge.' },
+            { id: 'antagonist_armor', name: 'Antagonist Armor', icon: '🛡️', badge: 'Prehab', trackWeight: false, defaultWeight: 0, defaultReps: 15, repsUnit: 'reps', sets: 3, desc: 'Pushups and reverse wrist curls to balance pull muscles.' },
+            { id: 'climber_core', name: 'Climber Core', icon: '💪', badge: 'Core Tension', trackWeight: false, defaultWeight: 0, defaultReps: 10, repsUnit: 'reps', sets: 3, desc: 'Hollow body holds and L-sits for steep overhang compression.' },
+            { id: 'mobility_flow', name: 'Mobility Flow', icon: '🧘', badge: 'Flexibility', trackWeight: false, defaultWeight: 0, defaultReps: 10, repsUnit: 'switches', sets: 3, desc: '90/90 hip switches and thoracic rotations for high feet.' }
+        ];
+
+        // AI Coach in-session recommendation state
+        let coachAltIndex = 0;
+        let currentCoachRec = null;
+
+        function updateCoachRecommendation() {
+            if (typeof Planner === 'undefined' || typeof Planner.recommendNextClimb !== 'function') return;
+            const elapsedMinutes = sessionStartTime ? Math.max(0, Math.floor((Date.now() - sessionStartTime) / 60000)) : 0;
+            const rec = Planner.recommendNextClimb(sessionClimbs, maxGradeIndex, elapsedMinutes, coachAltIndex);
+            currentCoachRec = rec;
+
+            const gradeEl = document.getElementById('coachRecGrade');
+            const titleEl = document.getElementById('coachRecTitle');
+            const adviceEl = document.getElementById('coachRecAdvice');
+            const tagsEl = document.getElementById('coachRecTags');
+            const catEl = document.getElementById('coachRecCategory');
+            const iconEl = document.getElementById('coachRecIcon');
+
+            if (gradeEl) gradeEl.innerText = rec.targetGradeStr;
+            if (titleEl) titleEl.innerText = rec.title;
+            if (adviceEl) adviceEl.innerText = rec.advice;
+            if (catEl) catEl.innerText = rec.category || 'Coach Suggestion';
+            if (iconEl) iconEl.innerText = rec.icon || '🤖';
+
+            if (tagsEl && rec.targetTags) {
+                tagsEl.innerHTML = rec.targetTags.map(t => `<span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">${t}</span>`).join('');
+            }
+
+            renderSessionCheckinUI();
+
+            const detailModal = document.getElementById('coachDetailModal');
+            if (detailModal && !detailModal.classList.contains('hidden')) {
+                updateCoachDetailModal();
             }
         }
 
-        // -- LOGIC: RENDER & DELETE SESSION CLIMBS --
+        function cycleCoachRecommendation() {
+            coachAltIndex++;
+            updateCoachRecommendation();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function renderSessionCheckinUI() {
+            if (typeof Planner === 'undefined') return;
+            const checkin = Planner.getCheckin ? Planner.getCheckin() : { fingers: 'fresh', skin: 'good', time: 90 };
+
+            // 1. Fingers buttons
+            const fingerBtns = {
+                fresh: document.getElementById('btnCheckinFingerFresh'),
+                stiff: document.getElementById('btnCheckinFingerStiff'),
+                tweaky: document.getElementById('btnCheckinFingerTweaky')
+            };
+            Object.entries(fingerBtns).forEach(([val, btn]) => {
+                if (!btn) return;
+                const isSel = checkin.fingers === val;
+                if (isSel) {
+                    const col = val === 'tweaky' ? 'bg-red-500/25 border-red-500/50 text-red-400' :
+                                val === 'stiff' ? 'bg-amber-500/25 border-amber-500/50 text-amber-400' :
+                                'bg-emerald-500/25 border-emerald-500/50 text-emerald-400';
+                    btn.className = `py-2 px-1 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1 border ${col} shadow-sm`;
+                } else {
+                    btn.className = 'py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1 border bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white';
+                }
+            });
+
+            // 2. Skin buttons
+            const skinBtns = {
+                good: document.getElementById('btnCheckinSkinGood'),
+                thin: document.getElementById('btnCheckinSkinThin'),
+                split: document.getElementById('btnCheckinSkinSplit')
+            };
+            Object.entries(skinBtns).forEach(([val, btn]) => {
+                if (!btn) return;
+                const isSel = checkin.skin === val;
+                if (isSel) {
+                    const col = val === 'split' ? 'bg-red-500/25 border-red-500/50 text-red-400' :
+                                val === 'thin' ? 'bg-amber-500/25 border-amber-500/50 text-amber-400' :
+                                'bg-emerald-500/25 border-emerald-500/50 text-emerald-400';
+                    btn.className = `py-1.5 px-1 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-1 border ${col} shadow-sm`;
+                } else {
+                    btn.className = 'py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white';
+                }
+            });
+
+            // 3. Time buttons
+            const timeBtns = {
+                45: document.getElementById('btnCheckinTime45'),
+                90: document.getElementById('btnCheckinTime90'),
+                120: document.getElementById('btnCheckinTime120')
+            };
+            Object.entries(timeBtns).forEach(([val, btn]) => {
+                if (!btn) return;
+                const isSel = Number(checkin.time) === Number(val);
+                if (isSel) {
+                    btn.className = 'py-1.5 px-1 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-1 border bg-emerald-500/25 border-emerald-500/50 text-emerald-400 shadow-sm';
+                } else {
+                    btn.className = 'py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white';
+                }
+            });
+
+            // 4. Quick Finger & Skin pill on main Coach Recommendation Card
+            const qIcon = document.getElementById('coachQuickFingerIcon');
+            const qText = document.getElementById('coachQuickFingerText');
+            if (qIcon && qText) {
+                if (checkin.fingers === 'tweaky') {
+                    qIcon.innerText = '🩹';
+                    qText.innerText = checkin.skin === 'split' ? 'Tweaky · Split' : 'Tweaky';
+                    qText.className = 'truncate text-red-400';
+                } else if (checkin.skin === 'split') {
+                    qIcon.innerText = '🩸';
+                    qText.innerText = 'Split Skin';
+                    qText.className = 'truncate text-red-400';
+                } else if (checkin.fingers === 'stiff') {
+                    qIcon.innerText = '🪵';
+                    qText.innerText = checkin.skin === 'thin' ? 'Stiff · Thin' : 'Stiff';
+                    qText.className = 'truncate text-amber-400';
+                } else if (checkin.skin === 'thin') {
+                    qIcon.innerText = '🧴';
+                    qText.innerText = 'Thin Skin';
+                    qText.className = 'truncate text-amber-400';
+                } else {
+                    qIcon.innerText = '⚡';
+                    qText.innerText = 'Fresh';
+                    qText.className = 'truncate text-emerald-400';
+                }
+            }
+
+            // 5. Status Pill in modal header (reflects both fingers and skin)
+            const statusPill = document.getElementById('checkinStatusPill');
+            if (statusPill) {
+                if (checkin.fingers === 'tweaky') {
+                    statusPill.innerText = 'Pulleys Protected';
+                    statusPill.className = 'text-[8px] font-black uppercase px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30';
+                } else if (checkin.skin === 'split') {
+                    statusPill.innerText = 'Skin Protection Mode';
+                    statusPill.className = 'text-[8px] font-black uppercase px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30';
+                } else if (checkin.fingers === 'stiff') {
+                    statusPill.innerText = 'Open-Hand Focus';
+                    statusPill.className = 'text-[8px] font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                } else if (checkin.skin === 'thin') {
+                    statusPill.innerText = 'Friction Caution';
+                    statusPill.className = 'text-[8px] font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                } else {
+                    statusPill.innerText = '100% Ready';
+                    statusPill.className = 'text-[8px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                }
+            }
+        }
+        window.renderSessionCheckinUI = renderSessionCheckinUI;
+
+        function setSessionCheckin(key, value) {
+            if (typeof Planner !== 'undefined' && typeof Planner.setCheckin === 'function') {
+                Planner.setCheckin(key, value);
+            }
+            renderSessionCheckinUI();
+            updateCoachRecommendation();
+            if (typeof updateCoachDetailModal === 'function') {
+                updateCoachDetailModal();
+            }
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+        window.setSessionCheckin = setSessionCheckin;
+
+        function openCoachDetailModal() {
+            if (!currentCoachRec) {
+                updateCoachRecommendation();
+            }
+            renderSessionCheckinUI();
+            updateCoachDetailModal();
+            const modal = document.getElementById('coachDetailModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+        window.openCoachDetailModal = openCoachDetailModal;
+
+        function closeCoachDetailModal() {
+            const modal = document.getElementById('coachDetailModal');
+            if (modal) {
+                modal.classList.remove('flex');
+                modal.classList.add('hidden');
+            }
+        }
+        window.closeCoachDetailModal = closeCoachDetailModal;
+
+        function updateCoachDetailModal() {
+            if (!currentCoachRec) return;
+            const rec = currentCoachRec;
+
+            const catEl = document.getElementById('coachDetailCategory');
+            const gradeEl = document.getElementById('coachDetailGrade');
+            const deltaEl = document.getElementById('coachDetailGradeDelta');
+            const iconEl = document.getElementById('coachDetailIcon');
+            const titleEl = document.getElementById('coachDetailTitle');
+            const tagsEl = document.getElementById('coachDetailTags');
+            const ratEl = document.getElementById('coachDetailRationale');
+            const restEl = document.getElementById('coachDetailRest');
+            const volEl = document.getElementById('coachDetailVolume');
+
+            if (catEl) catEl.innerText = rec.category || 'Coach Suggestion';
+            if (gradeEl) gradeEl.innerText = rec.targetGradeStr || '6A';
+            if (iconEl) iconEl.innerText = rec.icon || '🤖';
+            if (titleEl) titleEl.innerText = rec.title || 'Recommended Climb';
+
+            if (deltaEl) {
+                const diff = (rec.targetGradeIdx !== undefined ? rec.targetGradeIdx : maxGradeIndex) - maxGradeIndex;
+                deltaEl.innerText = diff === 0 ? '(Equal to Max)' : diff > 0 ? `(Max + ${diff})` : `(Max - ${Math.abs(diff)})`;
+            }
+
+            if (tagsEl && rec.targetTags) {
+                tagsEl.innerHTML = rec.targetTags.map(t => `<span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-lg bg-neutral-800 text-emerald-400 border border-neutral-700">${t}</span>`).join('');
+            }
+
+            const STAGE_RATIONALES = {
+                warmup: {
+                    rationale: 'Gradual progressive loading increases synovial fluid viscosity in finger joints, primes forearm neuromuscular recruitment, and prepares A2/A4 annular pulleys for high shearing forces before peak strain.',
+                    rest: '1–2 minutes',
+                    volume: '2–4 clean sends'
+                },
+                pyramid: {
+                    rationale: 'Moving dynamically on sub-maximal boulders primes high-threshold motor units (post-activation potentiation). Focus on explosive hip drive and clean momentum transfer rather than hanging passively.',
+                    rest: '2–3 minutes',
+                    volume: '2 quality attempts'
+                },
+                project: {
+                    rationale: 'Maximum efforts rapidly deplete intracellular phosphocreatine (ATP-CP) stores. Full neural and metabolic recovery takes 3 to 5 minutes between burns. Cap attempts per boulder at 4–5 to protect annular pulleys.',
+                    rest: '3–5 minutes',
+                    volume: 'Max effort burns'
+                },
+                breakthrough: {
+                    rationale: 'High pyramid base readiness or an intra-session flash streak indicates peak central nervous system potentiation. Channel this low-fatigue window into a supramaximal (+1 grade) boulder aligned with your strongest hold styles.',
+                    rest: '4–5 minutes',
+                    volume: '3–4 limit burns'
+                },
+                weakness_target: {
+                    rationale: 'Targeting hold and movement styles with your lowest historical send efficiency at sub-maximal intensity (-1 grade) expands motor vocabulary without overloading finger tendons.',
+                    rest: '2–3 minutes',
+                    volume: '1–2 sends (<3 tries)'
+                },
+                volume_consolidation: {
+                    rationale: 'When acute fatigue is elevated or connective tissue remodeling is incomplete, sub-maximal volume builds local forearm capillary density and technical economy while keeping pulley shear forces below the micro-trauma threshold.',
+                    rest: '2 minutes',
+                    volume: '4–6 sub-max sends'
+                },
+                rule_of_3: {
+                    rationale: "Multiple consecutive failures without progress indicate neuromuscular fatigue. Steve Bechtel's Rule of 3 shows that continuing project attempts at this point rapidly elevates tendon injury risk. Reset with easy movement.",
+                    rest: '4 minutes',
+                    volume: '1–2 flow resets'
+                },
+                strain_pivot: {
+                    rationale: 'High connective tissue strain detected from consecutive crimp/board attempts. Shifting to slopers, open-hand contact, or slabs allows active recovery of finger flexor tendons while maintaining training stimulus.',
+                    rest: '3 minutes',
+                    volume: 'Open-hand focus'
+                },
+                cooldown: {
+                    rationale: 'Power threshold or session time cutoff reached. Easy sub-maximal movement flushes forearm metabolites, preserves connective tissue mobility, and reduces post-session tendon stiffness.',
+                    rest: '1 minute',
+                    volume: 'Light flow'
+                }
+            };
+            window.STAGE_RATIONALES = STAGE_RATIONALES;
+
+            const details = STAGE_RATIONALES[rec.stage] || {
+                rationale: rec.advice || 'Follow structured rest intervals and focus on precise movement execution.',
+                rest: '2–3 minutes',
+                volume: 'Quality burns'
+            };
+
+            if (ratEl) ratEl.innerText = details.rationale;
+            if (restEl) restEl.innerText = details.rest;
+            if (volEl) volEl.innerText = details.volume;
+        }
+        window.updateCoachDetailModal = updateCoachDetailModal;
+
+        function applyCoachRecommendation() {
+            if (!currentCoachRec) updateCoachRecommendation();
+            const rec = currentCoachRec;
+            if (!rec) return;
+
+            openAddModal('climb', {
+                gradeStr: rec.targetGradeStr,
+                tags: [...(rec.targetTags || [])]
+            });
+        }
+
+        function openAddModal(mode = 'climb', prefill = null) {
+            modalAction = 'add';
+            editingRouteId = null;
+            editingWorkoutId = null;
+            modalMode = mode;
+
+            if (prefill && prefill.gradeStr) {
+                const idx = fontGrades.indexOf(prefill.gradeStr);
+                modalGradeIndex = idx >= 0 ? idx : maxGradeIndex;
+            } else {
+                modalGradeIndex = maxGradeIndex;
+            }
+
+            modalColorTag = 'red';
+            modalSelectedTags = (prefill && prefill.tags) ? [...prefill.tags] : [];
+            modalTries = 1;
+            modalCompletion = 0;
+
+            modalWorkoutPresetId = 'bench_press';
+            modalWorkoutWeight = 60;
+            modalWorkoutReps = 6;
+            modalWorkoutSets = [false, false, false, false];
+
+            if (!sessionStartTime) {
+                startSession();
+            }
+
+            renderModalUI();
+            const modal = document.getElementById('climbLogModal');
+            if (modal) modal.classList.replace('hidden', 'flex');
+        }
+
+        function openEditRouteModal(routeId) {
+            const climb = (sessionClimbs || []).find(c => c.id === routeId);
+            if (!climb) return;
+
+            modalAction = 'edit';
+            modalMode = 'climb';
+            editingRouteId = routeId;
+            editingWorkoutId = null;
+
+            const gIdx = fontGrades.indexOf(climb.gradeStr);
+            modalGradeIndex = gIdx >= 0 ? gIdx : maxGradeIndex;
+            modalColorTag = climb.colorTag || 'red';
+            modalSelectedTags = [...(climb.tags || [])];
+            modalTries = climb.tries || 1;
+            modalCompletion = climb.completionPct !== undefined ? climb.completionPct : (climb.isTop || climb.isFlash ? 100 : 0);
+
+            renderModalUI();
+            const modal = document.getElementById('climbLogModal');
+            if (modal) modal.classList.replace('hidden', 'flex');
+        }
+
+        function openEditWorkoutModal(workoutId) {
+            const workout = (sessionWorkouts || []).find(w => w.id === workoutId);
+            if (!workout) return;
+
+            modalAction = 'edit';
+            modalMode = 'workout';
+            editingWorkoutId = workoutId;
+            editingRouteId = null;
+
+            modalWorkoutPresetId = workout.id;
+            modalWorkoutWeight = workout.weight || 60;
+            modalWorkoutReps = workout.reps || 6;
+            const completedSets = (workout.exercises || []).reduce((acc, ex) => acc + (ex.completedSets || 0), 0);
+            const totalSets = (workout.exercises || []).reduce((acc, ex) => acc + (ex.sets || 0), 0) || 4;
+            modalWorkoutSets = [];
+            for (let i = 0; i < totalSets; i++) {
+                modalWorkoutSets.push(i < completedSets);
+            }
+
+            renderModalUI();
+            const modal = document.getElementById('climbLogModal');
+            if (modal) modal.classList.replace('hidden', 'flex');
+        }
+
+        function closeLogModal() {
+            const modal = document.getElementById('climbLogModal');
+            if (modal) modal.classList.replace('flex', 'hidden');
+            editingRouteId = null;
+            editingWorkoutId = null;
+        }
+
+        function switchLogModalMode(mode) {
+            modalMode = mode;
+            renderModalUI();
+        }
+
+        function renderModalUI() {
+            const titleEl = document.getElementById('climbLogModalTitle');
+            const iconEl = document.getElementById('modalHeaderIcon');
+            if (titleEl) {
+                if (modalAction === 'edit') {
+                    titleEl.innerText = modalMode === 'climb' ? 'Edit Route' : 'Edit Workout';
+                } else {
+                    titleEl.innerText = modalMode === 'climb' ? 'Add Route' : 'Add Workout';
+                }
+            }
+            if (iconEl) iconEl.innerText = modalMode === 'climb' ? '🧗' : '💪';
+
+            const btnClimb = document.getElementById('modalBtnClimb');
+            const btnWorkout = document.getElementById('modalBtnWorkout');
+            const climbCont = document.getElementById('modalClimbContainer');
+            const workoutCont = document.getElementById('modalWorkoutContainer');
+
+            if (modalMode === 'climb') {
+                if (btnClimb) {
+                    btnClimb.className = 'flex-1 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-emerald-500 text-black shadow-sm flex items-center justify-center gap-1.5';
+                }
+                if (btnWorkout) {
+                    btnWorkout.className = 'flex-1 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all text-neutral-400 hover:text-white flex items-center justify-center gap-1.5';
+                }
+                if (climbCont) climbCont.classList.remove('hidden');
+                if (workoutCont) workoutCont.classList.add('hidden');
+                renderModalClimbFields();
+            } else {
+                if (btnWorkout) {
+                    btnWorkout.className = 'flex-1 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-emerald-500 text-black shadow-sm flex items-center justify-center gap-1.5';
+                }
+                if (btnClimb) {
+                    btnClimb.className = 'flex-1 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all text-neutral-400 hover:text-white flex items-center justify-center gap-1.5';
+                }
+                if (climbCont) climbCont.classList.add('hidden');
+                if (workoutCont) workoutCont.classList.remove('hidden');
+                renderModalWorkoutFields();
+            }
+        }
+
+        function renderModalClimbFields() {
+            const gEl = document.getElementById('modalDisplayGrade');
+            if (gEl) gEl.innerText = fontGrades[modalGradeIndex] || '6A';
+
+            renderModalColorPalette();
+            renderModalStyleTags();
+
+            const tEl = document.getElementById('modalDisplayTries');
+            if (tEl) tEl.innerText = modalTries;
+
+            const compEl = document.getElementById('modalCompletionDisplay');
+            if (compEl) compEl.innerText = `${modalCompletion}%`;
+            [0, 25, 50, 75, 100].forEach(p => {
+                const btn = document.getElementById(`compBtn_${p}`);
+                if (btn) {
+                    if (modalCompletion === p) {
+                        btn.className = 'py-2 rounded-xl text-[10px] font-black transition-all bg-emerald-500 text-black shadow-sm';
+                    } else {
+                        btn.className = 'py-2 rounded-xl text-[10px] font-black transition-all bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800';
+                    }
+                }
+            });
+
+            const addActions = document.getElementById('modalClimbActionsAdd');
+            const editActions = document.getElementById('modalClimbActionsEdit');
+            if (modalAction === 'edit') {
+                if (addActions) addActions.classList.add('hidden');
+                if (editActions) editActions.classList.remove('hidden');
+            } else {
+                if (addActions) addActions.classList.remove('hidden');
+                if (editActions) editActions.classList.add('hidden');
+            }
+        }
+
+        function renderModalColorPalette() {
+            const container = document.getElementById('modalColorPalette');
+            if (!container) return;
+            const nameEl = document.getElementById('modalSelectedColorName');
+            const selectedObj = getColorObj(modalColorTag);
+            if (nameEl) nameEl.innerText = selectedObj.name;
+
+            container.innerHTML = COLOR_PALETTE.map(col => {
+                const isSel = col.id === modalColorTag;
+                return `
+                    <button type="button" onclick="setModalColorTag('${col.id}')" title="${col.name}" class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-90 ${
+                        isSel ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-950 scale-110 shadow-lg' : 'hover:scale-105 opacity-80'
+                    }" style="background-color: ${col.hex};">
+                        ${isSel ? '<span class="text-xs font-black text-white drop-shadow-md">✓</span>' : ''}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function setModalColorTag(colId) {
+            modalColorTag = colId;
+            renderModalColorPalette();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function renderModalStyleTags() {
+            const container = document.getElementById('modalStyleTagsContainer');
+            if (!container) return;
+            container.innerHTML = tagList.map(tag => {
+                const isSel = modalSelectedTags.includes(tag);
+                return `
+                    <button type="button" onclick="toggleModalStyleTag('${tag}')" class="px-2.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 ${
+                        isSel ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.15)]' : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white'
+                    }">
+                        <span>${tag}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function toggleModalStyleTag(tag) {
+            const idx = modalSelectedTags.indexOf(tag);
+            if (idx > -1) {
+                modalSelectedTags.splice(idx, 1);
+            } else {
+                modalSelectedTags.push(tag);
+            }
+            renderModalStyleTags();
+            if ('vibrate' in navigator) navigator.vibrate(5);
+        }
+
+        function adjModalGrade(delta) {
+            modalGradeIndex = Math.max(0, Math.min(fontGrades.length - 1, modalGradeIndex + delta));
+            const gEl = document.getElementById('modalDisplayGrade');
+            if (gEl) gEl.innerText = fontGrades[modalGradeIndex];
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function adjModalTries(delta) {
+            modalTries = Math.max(1, modalTries + delta);
+            const tEl = document.getElementById('modalDisplayTries');
+            if (tEl) tEl.innerText = modalTries;
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function setModalCompletion(pct) {
+            modalCompletion = pct;
+            renderModalClimbFields();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function submitModalClimb(isQuickSend = false) {
+            if ('vibrate' in navigator) navigator.vibrate(30);
+            if (!sessionStartTime) {
+                startSession();
+            }
+            const finalTries = isQuickSend ? 1 : modalTries;
+            const finalCompletion = isQuickSend ? 100 : modalCompletion;
+            const isSent = finalCompletion === 100;
+            const isFl = isSent && (finalTries === 1);
+            const isTp = isSent && !isFl;
+
+            const delta = modalGradeIndex - maxGradeIndex;
+            const pts = calculatePoints(delta, isFl, isTp, finalTries, finalCompletion);
+
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+            const colObj = getColorObj(modalColorTag);
+
+            const newClimb = {
+                id: climbIdCounter++,
+                gradeStr: fontGrades[modalGradeIndex],
+                colorTag: modalColorTag,
+                colorHex: colObj.hex,
+                statusText: isFl ? 'Flash' : isTp ? 'Top' : 'Project',
+                color: isFl ? 'text-amber-400' : isTp ? 'text-blue-400' : 'text-neutral-400',
+                tries: finalTries,
+                completionPct: finalCompletion,
+                isTop: isTp,
+                isFlash: isFl,
+                points: pts,
+                time: timeStr,
+                tags: [...modalSelectedTags]
+            };
+
+            sessionClimbs.unshift(newClimb);
+
+            if (isSent) {
+                unlockAchievement('first_blood');
+                if (isFl && delta === 0) unlockAchievement('the_flash');
+                if (delta > 0) unlockAchievement('crusher');
+                if (finalTries >= 5) unlockAchievement('dedication');
+                if (typeof confetti === 'function') {
+                    confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 } });
+                }
+                if (modalGradeIndex > maxGradeIndex) {
+                    maxGradeIndex = modalGradeIndex;
+                    localStorage.setItem('boulderMaxGradeIndex', maxGradeIndex);
+                }
+            }
+
+            renderSessionList();
+            saveActiveSession();
+            checkLiveFatigueAlert();
+            updateCoachRecommendation();
+            closeLogModal();
+        }
+
+        function saveModalClimbEdits() {
+            if (editingRouteId === null) return;
+            const climb = (sessionClimbs || []).find(c => c.id === editingRouteId);
+            if (!climb) return;
+
+            const isSent = modalCompletion === 100;
+            const isFl = isSent && (modalTries === 1);
+            const isTp = isSent && !isFl;
+            const delta = modalGradeIndex - maxGradeIndex;
+            const pts = calculatePoints(delta, isFl, isTp, modalTries, modalCompletion);
+            const colObj = getColorObj(modalColorTag);
+
+            climb.gradeStr = fontGrades[modalGradeIndex];
+            climb.colorTag = modalColorTag;
+            climb.colorHex = colObj.hex;
+            climb.tries = modalTries;
+            climb.completionPct = modalCompletion;
+            climb.isTop = isTp;
+            climb.isFlash = isFl;
+            climb.statusText = isFl ? 'Flash' : isTp ? 'Top' : 'Project';
+            climb.color = isFl ? 'text-amber-400' : isTp ? 'text-blue-400' : 'text-neutral-400';
+            climb.points = pts;
+            climb.tags = [...modalSelectedTags];
+
+            if (isSent && typeof confetti === 'function') {
+                confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+            }
+
+            renderSessionList();
+            saveActiveSession();
+            checkLiveFatigueAlert();
+            updateCoachRecommendation();
+            closeLogModal();
+        }
+
+        function deleteModalClimb() {
+            if (editingRouteId === null) return;
+            if (confirm('Are you sure you want to delete this route from the session?')) {
+                removeClimb(editingRouteId);
+                closeLogModal();
+            }
+        }
+
+        function renderModalWorkoutFields() {
+            const chipsCont = document.getElementById('modalWorkoutPresetChips');
+            if (chipsCont) {
+                chipsCont.innerHTML = WORKOUT_PRESET_ITEMS.map(p => {
+                    const isSel = p.id === modalWorkoutPresetId;
+                    return `
+                        <button type="button" onclick="selectModalWorkoutPreset('${p.id}')" class="p-2 rounded-xl text-left border transition-all ${
+                            isSel ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-sm' : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
+                        }">
+                            <span class="text-sm block">${p.icon}</span>
+                            <span class="text-[10px] font-black uppercase truncate block mt-0.5">${p.name}</span>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            const curPreset = WORKOUT_PRESET_ITEMS.find(p => p.id === modalWorkoutPresetId) || WORKOUT_PRESET_ITEMS[0];
+            const titleEl = document.getElementById('modalWorkoutExTitle');
+            const catEl = document.getElementById('modalWorkoutExCategory');
+            const descEl = document.getElementById('modalWorkoutExDesc');
+            const wDisp = document.getElementById('modalWorkoutWeightDisplay');
+            const rDisp = document.getElementById('modalWorkoutRepsDisplay');
+            const weightCol = document.getElementById('modalWorkoutWeightCol');
+            const repsCol = document.getElementById('modalWorkoutRepsCol');
+            const repsLabel = document.getElementById('modalWorkoutRepsLabel');
+
+            if (titleEl) titleEl.innerText = curPreset.name;
+            if (catEl) catEl.innerText = curPreset.badge;
+            if (descEl) descEl.innerText = curPreset.desc;
+
+            // Handle whether this exercise tracks weight (e.g. Bench press / Weighted hangs vs Mobility / Core)
+            if (curPreset.trackWeight) {
+                if (weightCol) weightCol.classList.remove('hidden');
+                if (repsCol) repsCol.className = 'p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800 flex flex-col items-center col-span-1';
+                if (wDisp) wDisp.innerText = `${modalWorkoutWeight} kg`;
+            } else {
+                if (weightCol) weightCol.classList.add('hidden');
+                if (repsCol) repsCol.className = 'p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800 flex flex-col items-center col-span-2';
+            }
+
+            if (repsLabel) repsLabel.innerText = curPreset.repsUnit === 'switches' ? 'Switches / Reps' : curPreset.repsUnit === 'hang' ? 'Hang Duration' : 'Reps';
+            if (rDisp) rDisp.innerText = curPreset.repsUnit === 'hang' ? `${modalWorkoutReps * 10}s` : `${modalWorkoutReps} ${curPreset.repsUnit || 'reps'}`;
+
+            const isHang = curPreset.id === 'repeaters_7_3' || curPreset.id === 'max_hangs';
+            const isRepeaters = curPreset.id === 'repeaters_7_3';
+
+            // Dedicated Hangboard Controller in Modal
+            const hangController = document.getElementById('modalHangboardController');
+            const hangIcon = document.getElementById('modalHangIcon');
+            const hangTitle = document.getElementById('modalHangTitle');
+            const hangSubtitle = document.getElementById('modalHangSubtitle');
+            const hangDesc = document.getElementById('modalHangDesc');
+            const hangBtnText = document.getElementById('modalBtnStartHangText');
+            const setsHint = document.getElementById('modalWorkoutSetsHint');
+
+            const nextIncompleteIdx = modalWorkoutSets.findIndex(s => !s);
+            const nextSetNum = nextIncompleteIdx !== -1 ? (nextIncompleteIdx + 1) : 1;
+            const allSetsCompleted = modalWorkoutSets.length > 0 && modalWorkoutSets.every(Boolean);
+
+            if (hangController) {
+                if (isHang) {
+                    hangController.classList.remove('hidden');
+                    hangController.classList.add('flex');
+                    if (hangIcon) hangIcon.innerText = curPreset.icon;
+                    if (hangTitle) hangTitle.innerText = isRepeaters ? '7:3 Repeaters Protocol' : 'Max Hangs Protocol';
+                    if (hangSubtitle) hangSubtitle.innerText = isRepeaters ? '6 Reps × (7s Hang / 3s Rest)' : `${modalWorkoutReps * 10}s @ Max Effort`;
+                    if (hangDesc) {
+                        hangDesc.innerText = isRepeaters 
+                            ? '5s Prep Chime → 6 × (7s Hang / 3s Shakeout) → Auto 2.5m Rest with audio beeps.'
+                            : `5s Prep Countdown → ${modalWorkoutReps * 10}s Hang → Release Buzzer → 3m Rest.`;
+                    }
+                    if (hangBtnText) {
+                        hangBtnText.innerText = allSetsCompleted 
+                            ? (isRepeaters ? 'RE-RUN 7:3 TIMER (SET 1)' : 'RE-RUN HANG TIMER (SET 1)')
+                            : (isRepeaters ? `START 7:3 TIMER (SET ${nextSetNum})` : `START HANG TIMER (HANG ${nextSetNum})`);
+                    }
+                    if (setsHint) setsHint.innerText = 'Tap set to run timer';
+                } else {
+                    hangController.classList.add('hidden');
+                    hangController.classList.remove('flex');
+                    if (setsHint) setsHint.innerText = 'Tap to mark done';
+                }
+            }
+
+            const setsCont = document.getElementById('modalWorkoutSetsGrid');
+            if (setsCont) {
+                const totalSets = modalWorkoutSets.length > 0 ? modalWorkoutSets.length : (curPreset.sets || 4);
+                setsCont.innerHTML = Array.from({ length: totalSets }).map((_, i) => {
+                    const isDone = modalWorkoutSets[i] === true;
+                    return `
+                        <button type="button" onclick="${isHang ? `launchHangTimer('${curPreset.id}', ${i})` : `toggleModalWorkoutSet(${i})`}" class="py-2.5 px-2 rounded-xl text-xs font-bold uppercase transition-all flex items-center justify-center gap-1 active:scale-95 ${
+                            isDone ? 'bg-emerald-500 text-black shadow-md' : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white'
+                        }" title="${isHang ? `Launch timer for Set ${i + 1}` : `Toggle Set ${i + 1}`}">
+                            <span>${isDone ? '✓' : isHang ? '▶️' : 'Set'} ${i + 1}</span>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            // Sync left action button in Add mode
+            const leftIcon = document.getElementById('modalWorkoutActionLeftIcon');
+            const leftLabel = document.getElementById('modalWorkoutActionLeftLabel');
+            if (leftIcon) leftIcon.innerText = isHang ? '⚡' : '⏱️';
+            if (leftLabel) {
+                if (isHang) {
+                    leftLabel.innerText = allSetsCompleted ? 'Re-run Timer' : `Run Set ${nextSetNum} (${isRepeaters ? '7:3' : 'Hang'})`;
+                } else {
+                    leftLabel.innerText = 'Set & Rest (90s)';
+                }
+            }
+
+            const addActions = document.getElementById('modalWorkoutActionsAdd');
+            const editActions = document.getElementById('modalWorkoutActionsEdit');
+            if (modalAction === 'edit') {
+                if (addActions) addActions.classList.add('hidden');
+                if (editActions) editActions.classList.remove('hidden');
+            } else {
+                if (addActions) addActions.classList.remove('hidden');
+                if (editActions) editActions.classList.add('hidden');
+            }
+        }
+
+        function handleModalWorkoutLeftAction() {
+            const isHang = modalWorkoutPresetId === 'repeaters_7_3' || modalWorkoutPresetId === 'max_hangs';
+            if (isHang) {
+                launchHangTimer(modalWorkoutPresetId);
+            } else {
+                logWorkoutSetAndRest();
+            }
+        }
+        window.handleModalWorkoutLeftAction = handleModalWorkoutLeftAction;
+
+        function launchHangTimer(presetId = null, setIdx = null) {
+            const targetId = presetId || modalWorkoutPresetId || 'repeaters_7_3';
+
+            if (!sessionStartTime) {
+                startSession();
+            }
+
+            // Prime/unlock audio engine on user interaction
+            if (typeof window.initAudio === 'function') {
+                try {
+                    window.initAudio();
+                } catch (e) { }
+            }
+
+            // Initialize canonical preset structure so exercises have full hangConfig
+            selectWorkoutPreset(targetId);
+
+            if (!activeWorkoutPreset || !activeWorkoutPreset.exercises || activeWorkoutPreset.exercises.length === 0) {
+                console.warn('Could not initialize workout preset for hang timer:', targetId);
+                return;
+            }
+
+            // Determine target set index
+            if (typeof setIdx === 'number' && setIdx >= 0 && setIdx < activeWorkoutPreset.exercises.length) {
+                activeWorkoutExIndex = setIdx;
+            } else {
+                const nextUnfinished = activeWorkoutPreset.exercises.findIndex(ex => (ex.completedSets || 0) < (ex.sets || 1));
+                activeWorkoutExIndex = nextUnfinished !== -1 ? nextUnfinished : 0;
+            }
+
+            closeLogModal();
+            startHangTimer();
+        }
+        window.launchHangTimer = launchHangTimer;
+
+        function selectModalWorkoutPreset(pId) {
+            modalWorkoutPresetId = pId;
+            const curPreset = WORKOUT_PRESET_ITEMS.find(p => p.id === pId) || WORKOUT_PRESET_ITEMS[0];
+            modalWorkoutWeight = curPreset.defaultWeight;
+            modalWorkoutReps = curPreset.defaultReps;
+
+            const existing = (sessionWorkouts || []).find(w => w.id === pId);
+            if (existing && Array.isArray(existing.exercises)) {
+                const totalSets = curPreset.sets || 4;
+                const completedCount = existing.exercises.reduce((acc, ex) => acc + (ex.completedSets || 0), 0);
+                modalWorkoutSets = Array.from({ length: totalSets }).map((_, i) => i < completedCount);
+            } else {
+                modalWorkoutSets = Array(curPreset.sets || 4).fill(false);
+            }
+
+            renderModalWorkoutFields();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function adjModalWorkoutWeight(delta) {
+            modalWorkoutWeight = Math.max(0, modalWorkoutWeight + delta);
+            const wDisp = document.getElementById('modalWorkoutWeightDisplay');
+            if (wDisp) wDisp.innerText = `${modalWorkoutWeight} kg`;
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function adjModalWorkoutReps(delta) {
+            const curPreset = WORKOUT_PRESET_ITEMS.find(p => p.id === modalWorkoutPresetId) || WORKOUT_PRESET_ITEMS[0];
+            modalWorkoutReps = Math.max(1, modalWorkoutReps + delta);
+            const rDisp = document.getElementById('modalWorkoutRepsDisplay');
+            if (rDisp) rDisp.innerText = curPreset.repsUnit === 'hang' ? `${modalWorkoutReps * 10}s` : `${modalWorkoutReps} ${curPreset.repsUnit || 'reps'}`;
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function toggleModalWorkoutSet(setIdx) {
+            if (!modalWorkoutSets[setIdx]) {
+                modalWorkoutSets[setIdx] = true;
+            } else {
+                modalWorkoutSets[setIdx] = false;
+            }
+            renderModalWorkoutFields();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function logWorkoutSetAndRest() {
+            const nextUnset = modalWorkoutSets.findIndex(s => !s);
+            if (nextUnset !== -1) {
+                modalWorkoutSets[nextUnset] = true;
+            } else {
+                modalWorkoutSets.push(true);
+            }
+            renderModalWorkoutFields();
+            if (typeof startRestTimer === 'function') {
+                startRestTimer(90, true);
+            }
+            if ('vibrate' in navigator) navigator.vibrate([20, 40, 20]);
+        }
+
+        function saveModalWorkoutToSession() {
+            if (!sessionStartTime) {
+                startSession();
+            }
+            const curPreset = WORKOUT_PRESET_ITEMS.find(p => p.id === modalWorkoutPresetId) || WORKOUT_PRESET_ITEMS[0];
+            const completedSets = modalWorkoutSets.filter(Boolean).length;
+            const totalSets = modalWorkoutSets.length || curPreset.sets || 4;
+            const finalWeight = curPreset.trackWeight ? modalWorkoutWeight : 0;
+            const isHang = curPreset.id === 'repeaters_7_3' || curPreset.id === 'max_hangs';
+
+            if (isHang) {
+                selectWorkoutPreset(curPreset.id);
+                const target = (sessionWorkouts || []).find(w => w.id === curPreset.id);
+                if (target && Array.isArray(target.exercises)) {
+                    target.trackWeight = !!curPreset.trackWeight;
+                    target.weight = finalWeight;
+                    target.reps = modalWorkoutReps;
+                    target.exercises.forEach((ex, idx) => {
+                        ex.completedSets = modalWorkoutSets[idx] ? 1 : 0;
+                        ex.sets = 1;
+                        if (curPreset.trackWeight) {
+                            ex.weight = finalWeight;
+                            ex.trackWeight = true;
+                        }
+                    });
+                }
+            } else if (modalAction === 'edit' && editingWorkoutId) {
+                const existing = (sessionWorkouts || []).find(w => w.id === editingWorkoutId);
+                if (existing) {
+                    existing.trackWeight = !!curPreset.trackWeight;
+                    existing.weight = finalWeight;
+                    existing.reps = modalWorkoutReps;
+                    if (existing.exercises && existing.exercises[0]) {
+                        existing.exercises[0].completedSets = completedSets;
+                        existing.exercises[0].sets = totalSets;
+                        existing.exercises[0].trackWeight = !!curPreset.trackWeight;
+                        existing.exercises[0].weight = finalWeight;
+                    }
+                }
+            } else {
+                const existingIdx = (sessionWorkouts || []).findIndex(w => w.id === curPreset.id);
+                const workoutObj = {
+                    id: curPreset.id,
+                    name: curPreset.name,
+                    shortName: curPreset.name,
+                    icon: curPreset.icon,
+                    badge: curPreset.badge,
+                    trackWeight: !!curPreset.trackWeight,
+                    weight: finalWeight,
+                    reps: modalWorkoutReps,
+                    exercises: [{
+                        id: curPreset.id,
+                        name: curPreset.name,
+                        sets: totalSets,
+                        completedSets: completedSets,
+                        trackWeight: !!curPreset.trackWeight,
+                        weight: finalWeight,
+                        reps: modalWorkoutReps
+                    }]
+                };
+                if (existingIdx > -1) {
+                    sessionWorkouts[existingIdx] = workoutObj;
+                } else {
+                    sessionWorkouts.push(workoutObj);
+                }
+            }
+
+            renderSessionList();
+            saveActiveSession();
+            closeLogModal();
+        }
+
+        function deleteModalWorkout() {
+            if (!editingWorkoutId) return;
+            if (confirm('Delete this workout from the session?')) {
+                const idx = (sessionWorkouts || []).findIndex(w => w.id === editingWorkoutId);
+                if (idx > -1) {
+                    sessionWorkouts.splice(idx, 1);
+                    renderSessionList();
+                    saveActiveSession();
+                }
+                closeLogModal();
+            }
+        }
+
+        // ============================================================================
+        // INLINE ACTIONS ON ROUTE CARDS (EDIT / BURN / COMPLETION)
+        // ============================================================================
+        function quickAdjustTries(routeId, delta) {
+            const climb = (sessionClimbs || []).find(c => c.id === routeId);
+            if (!climb) return;
+
+            if (!sessionStartTime) startSession();
+
+            climb.tries = Math.max(1, (climb.tries || 1) + delta);
+            const gIdx = fontGrades.indexOf(climb.gradeStr);
+            const deltaGrade = (gIdx >= 0 ? gIdx : maxGradeIndex) - maxGradeIndex;
+            climb.points = calculatePoints(deltaGrade, climb.isFlash, climb.isTop, climb.tries, climb.completionPct || 0);
+
+            renderSessionList();
+            saveActiveSession();
+            checkLiveFatigueAlert();
+            updateCoachRecommendation();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+
+        function quickRecordRouteBurn(routeId) {
+            quickAdjustTries(routeId, 1);
+            if (typeof startRestTimer === 'function') {
+                startRestTimer();
+            }
+        }
+
+        function quickSetCompletion(routeId, pct) {
+            const climb = (sessionClimbs || []).find(c => c.id === routeId);
+            if (!climb) return;
+
+            if (!sessionStartTime) startSession();
+
+            const isSent = pct === 100;
+            const isFl = isSent && (climb.tries === 1);
+            const isTp = isSent && !isFl;
+
+            climb.completionPct = pct;
+            climb.isTop = isTp;
+            climb.isFlash = isFl;
+            climb.statusText = isFl ? 'Flash' : isTp ? 'Top' : 'Project';
+            climb.color = isFl ? 'text-amber-400' : isTp ? 'text-blue-400' : 'text-neutral-400';
+
+            const gIdx = fontGrades.indexOf(climb.gradeStr);
+            const deltaGrade = (gIdx >= 0 ? gIdx : maxGradeIndex) - maxGradeIndex;
+            climb.points = calculatePoints(deltaGrade, isFl, isTp, climb.tries, pct);
+
+            if (isSent) {
+                unlockAchievement('first_blood');
+                if (isFl && deltaGrade === 0) unlockAchievement('the_flash');
+                if (deltaGrade > 0) unlockAchievement('crusher');
+                if (typeof confetti === 'function') {
+                    confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 } });
+                }
+                if (gIdx > maxGradeIndex) {
+                    maxGradeIndex = gIdx;
+                    localStorage.setItem('boulderMaxGradeIndex', maxGradeIndex);
+                }
+            }
+
+            renderSessionList();
+            saveActiveSession();
+            checkLiveFatigueAlert();
+            updateCoachRecommendation();
+            if ('vibrate' in navigator) navigator.vibrate(25);
+        }
+
+        // ============================================================================
+        // RENDER & MANAGE SESSION CLIMBS & WORKOUTS
+        // ============================================================================
         function renderSessionList() {
             const listEl = document.getElementById('sessionList');
+            if (!listEl) return;
             recomputeSessionScore();
-            document.getElementById('sessionScoreDisplay').innerText = sessionScore;
+            const scoreEl = document.getElementById('sessionScoreDisplay');
+            if (scoreEl) scoreEl.innerText = sessionScore;
+
+            const countEl = document.getElementById('sessionItemsCount');
+            const totalCount = (sessionClimbs ? sessionClimbs.length : 0) + (sessionWorkouts ? sessionWorkouts.length : 0);
+            if (countEl) countEl.innerText = `${totalCount} item${totalCount === 1 ? '' : 's'}`;
 
             let workoutItemsHtml = '';
             if (sessionWorkouts && sessionWorkouts.length > 0) {
                 sessionWorkouts.forEach(w => {
                     const completedSetsCount = (w.exercises || []).reduce((acc, ex) => acc + (ex.completedSets || 0), 0);
                     const totalSetsCount = (w.exercises || []).reduce((acc, ex) => acc + (ex.sets || 0), 0);
-                    if (completedSetsCount > 0) {
-                        workoutItemsHtml += `
-                            <li class="flex justify-between items-center p-2.5 bg-neutral-850/80 rounded-xl border border-cyan-500/30">
-                                <div class="flex items-center gap-3">
+                    const isHang = w.id === 'repeaters_7_3' || w.id === 'max_hangs' || w.category === 'hangboard';
+                    const nextSetNum = completedSetsCount < totalSetsCount ? (completedSetsCount + 1) : 1;
+                    const allDone = completedSetsCount >= totalSetsCount && totalSetsCount > 0;
+
+                    workoutItemsHtml += `
+                        <li class="flex flex-col gap-2 p-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 shadow-sm transition-all hover:border-neutral-700">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2.5 min-w-0">
                                     <span class="text-xl">${w.icon || '💪'}</span>
-                                    <div class="flex flex-col">
-                                        <span class="text-xs font-black text-white leading-tight">${w.shortName || w.name}</span>
-                                        <span class="text-[10px] text-cyan-400 font-bold">${completedSetsCount}/${totalSetsCount} Sets Completed</span>
+                                    <div class="flex flex-col min-w-0">
+                                        <span class="text-xs font-black text-white truncate leading-tight">${w.shortName || w.name}</span>
+                                        <span class="text-[10px] text-cyan-400 font-bold">${completedSetsCount}/${totalSetsCount} Sets Completed ${(w.trackWeight && w.weight > 0) ? `· ${w.weight}kg` : ''}</span>
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-emerald-400 font-bold text-sm">+${completedSetsCount * 10} pts</span>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-emerald-400 font-bold text-xs">+${completedSetsCount * 10} pts</span>
+                                    <button type="button" onclick="openEditWorkoutModal('${w.id}')" class="p-1.5 rounded-lg text-neutral-400 hover:text-white bg-neutral-800 active:scale-90" title="Edit Workout">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                    </button>
                                 </div>
-                            </li>
-                        `;
-                    }
+                            </div>
+                            ${isHang ? `
+                                <div class="flex items-center justify-between pt-1.5 border-t border-neutral-800/80 mt-0.5">
+                                    <span class="text-[10px] text-neutral-400 font-mono">
+                                        ${allDone ? '✓ All sets completed' : `Next: Set ${nextSetNum} of ${totalSetsCount}`}
+                                    </span>
+                                    <button type="button" onclick="launchHangTimer('${w.id}')" class="py-1 px-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-400 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all shadow-sm">
+                                        <span>▶️</span>
+                                        <span>${allDone ? 'Re-run Timer' : `Start Set ${nextSetNum} (${w.id === 'repeaters_7_3' ? '7:3' : 'Hang'})`}</span>
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </li>
+                    `;
                 });
             }
 
             if (sessionClimbs.length === 0 && !workoutItemsHtml) {
-                listEl.innerHTML = '<li class="text-neutral-500 text-center mt-10 text-sm">No climbs or workouts logged yet.</li>';
+                listEl.innerHTML = `
+                    <li class="text-neutral-500 text-center py-12 flex flex-col items-center justify-center gap-2">
+                        <span class="text-3xl">🧗</span>
+                        <span class="text-xs font-bold">No climbs or workouts in this session yet.</span>
+                        <span class="text-[10px] text-neutral-600">Tap + Add Climb / Workout below to log your first route!</span>
+                    </li>`;
                 return;
             }
 
-            const climbsHtml = sessionClimbs.map(c => `
-                <li class="flex justify-between items-center p-2.5 bg-neutral-800/50 rounded-xl border border-neutral-700/30">
-                    <div class="flex items-center gap-3">
-                        <div class="flex flex-col items-center justify-center w-8">
-                            <span class="text-lg font-black leading-tight">${c.gradeStr}</span>
-                            ${c.time ? `<span class="text-[8px] text-neutral-500 -mt-1 tracking-tighter">${c.time}</span>` : ''}
+            const climbsHtml = sessionClimbs.map(c => {
+                const colObj = getColorObj(c.colorTag);
+                const hex = c.colorHex || colObj.hex;
+                const isSent = c.isTop || c.isFlash || c.statusText === 'Top' || c.statusText === 'Flash';
+                const statusBadge = c.isFlash
+                    ? `<span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30">FLASH (100%)</span>`
+                    : isSent
+                    ? `<span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30">TOP (100%)</span>`
+                    : `<span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-neutral-800 text-neutral-300 border border-neutral-700">${c.completionPct || 0}% complete</span>`;
+
+                return `
+                    <li class="p-3.5 bg-neutral-900/90 rounded-[1.75rem] border border-neutral-800 shadow-sm flex flex-col gap-2.5 transition-all hover:border-neutral-700">
+                        <!-- Row 1: Color Circle, Grade, Tries, Status, Points & Edit Button -->
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <!-- Circular Color Tag (Matching user sketch) -->
+                                <div class="w-7 h-7 rounded-full shrink-0 border-[3.5px] shadow-sm" style="border-color: ${hex}; background-color: ${hex}20;"></div>
+                                <div class="flex items-baseline gap-1.5 min-w-0">
+                                    <span class="text-base sm:text-lg font-black text-white leading-none">${c.gradeStr}</span>
+                                    <span class="text-[11px] font-bold text-neutral-400 leading-none">${c.tries} ${c.tries === 1 ? 'try' : 'tries'}</span>
+                                </div>
+                                ${statusBadge}
+                            </div>
+
+                            <div class="flex items-center gap-2 shrink-0">
+                                <span class="text-emerald-400 font-bold text-xs sm:text-sm">+${c.points} pts</span>
+                                <button type="button" onclick="openEditRouteModal(${c.id})" class="p-1.5 rounded-lg text-neutral-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 active:scale-90 transition-all" title="Edit Route">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                </button>
+                            </div>
                         </div>
-                        <div class="flex flex-col">
-                            <span class="${c.color} text-[11px] font-bold uppercase tracking-wider">${c.statusText}</span>
-                            <span class="text-neutral-500 text-[9px]">${c.tries} Attempt${c.tries > 1 ? 's' : ''}</span>
-                            ${c.tags && c.tags.length > 0 ? `<div class="flex gap-1 mt-1 flex-wrap">${c.tags.map(t => `<span class="bg-neutral-800 text-neutral-400 border border-neutral-700 text-[8px] uppercase px-1.5 py-0.5 rounded">${t}</span>`).join('')}</div>` : ''}
+
+                        <!-- Row 2: Style Tags (Matching user sketch) -->
+                        ${c.tags && c.tags.length > 0 ? `
+                        <div class="flex gap-1.5 flex-wrap -mt-0.5">
+                            ${c.tags.map(t => `<span class="bg-neutral-800/90 text-neutral-400 border border-neutral-700/80 text-[8px] uppercase px-1.5 py-0.5 rounded-md font-bold tracking-wider">${t}</span>`).join('')}
+                        </div>` : ''}
+
+                        <!-- Row 3: Primary Quick Actions (Tries Stepper & Burn + Rest) -->
+                        <div class="flex items-center gap-2 pt-1 border-t border-neutral-800/60">
+                            <div class="flex items-center bg-neutral-950 rounded-xl p-0.5 border border-neutral-800 shrink-0">
+                                <button type="button" onclick="quickAdjustTries(${c.id}, -1)" class="w-8 h-8 rounded-lg text-neutral-400 hover:text-white flex items-center justify-center font-black active:scale-90 text-sm transition-transform">&minus;</button>
+                                <span class="text-xs font-mono font-black text-white px-2 min-w-[32px] text-center">${c.tries}t</span>
+                                <button type="button" onclick="quickAdjustTries(${c.id}, 1)" class="w-8 h-8 rounded-lg text-neutral-400 hover:text-white flex items-center justify-center font-black active:scale-90 text-sm transition-transform">+</button>
+                            </div>
+
+                            <button type="button" onclick="quickRecordRouteBurn(${c.id})" class="flex-1 py-2 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-750 text-neutral-200 border border-neutral-700/80 font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm">
+                                <span>⏱️</span>
+                                <span>+1 Burn & Rest</span>
+                            </button>
                         </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-emerald-400 font-bold text-sm">+${c.points} pts</span>
-                        <button onclick="removeClimb(${c.id})" class="text-red-500/40 hover:text-red-500 active:scale-90 transition p-2 -mr-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        </button>
-                    </div>
-                </li>
-            `).join('');
+
+                        <!-- Row 4: Full-Width 5-Segment Milestone Bar (Chalk-Friendly 34px Tap Targets) -->
+                        <div class="grid grid-cols-5 gap-1.5 pt-1 border-t border-neutral-800/40">
+                            ${[0, 25, 50, 75, 100].map(pct => {
+                                const isCurrent = (c.completionPct || 0) === pct;
+                                const isTop = pct === 100;
+                                let btnClasses = '';
+                                if (isTop && isCurrent) {
+                                    btnClasses = 'bg-emerald-500 text-black font-black shadow-md shadow-emerald-500/25 border-emerald-400';
+                                } else if (isCurrent) {
+                                    btnClasses = 'bg-emerald-500/25 text-emerald-300 font-black border border-emerald-500/50 shadow-sm';
+                                } else if (isTop) {
+                                    btnClasses = 'bg-neutral-950 text-emerald-400/90 hover:text-emerald-300 border border-neutral-800 font-black';
+                                } else {
+                                    btnClasses = 'bg-neutral-950 text-neutral-400 hover:text-white border border-neutral-800 font-bold';
+                                }
+                                return `
+                                    <button type="button" onclick="quickSetCompletion(${c.id}, ${pct})" class="py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all min-h-[34px] flex items-center justify-center active:scale-95 border ${btnClasses}">
+                                        ${isTop ? 'TOP 🏆' : `${pct}%`}
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </li>
+                `;
+            }).join('');
 
             listEl.innerHTML = workoutItemsHtml + climbsHtml;
         }
@@ -2211,7 +3361,7 @@
                 const alertBox = document.getElementById('liveFatigueAlert');
                 const textEl = document.getElementById('liveFatigueText');
                 if (alertBox && textEl) {
-                    if (res.fatigueDetected) {
+                    if (res && res.fatigueDetected) {
                         textEl.innerText = res.alertMessage;
                         alertBox.classList.remove('hidden');
                     } else {
@@ -2222,567 +3372,58 @@
         }
 
         function removeClimb(id) {
-            const index = sessionClimbs.findIndex(c => c.id === id);
+            const index = (sessionClimbs || []).findIndex(c => c.id === id);
             if (index > -1) {
                 sessionScore -= sessionClimbs[index].points;
                 sessionClimbs.splice(index, 1);
                 renderSessionList();
                 saveActiveSession();
                 checkLiveFatigueAlert();
-                checkIntraSessionAdaptation();
+                updateCoachRecommendation();
             }
         }
 
-        // =============================================
-        // COACH-GUIDED RECOMMENDATIONS IMPLEMENTATION
-        // =============================================
-
-        let dismissedCoachAdaptationIds = new Set();
-
-        function checkIntraSessionAdaptation() {
-            if (!trainingActive || !coachPlan || !coachPlan.phases || !coachPlan.phases[coachPhaseIndex]) {
-                hideCoachAdaptiveBanner();
-                return;
-            }
-
-            if (typeof Planner === 'undefined' || typeof Planner.evaluateIntraSessionAdaptation !== 'function') {
-                hideCoachAdaptiveBanner();
-                return;
-            }
-
-            const inProgress = {
-                gradeStr: fontGrades[currentGradeIndex],
-                tries: tries || 1,
-                status: (isTop || isFlash) ? 'topped' : 'in_progress'
-            };
-            const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan, inProgress);
-            const banner = document.getElementById('coachAdaptiveBanner');
-            if (!banner) return;
-
-            if (!adaptation || dismissedCoachAdaptationIds.has(adaptation.id)) {
-                banner.classList.add('hidden');
-                return;
-            }
-
-            // Populate banner
-            const iconEl = document.getElementById('coachAdaptiveIcon');
-            const titleEl = document.getElementById('coachAdaptiveTitle');
-            const msgEl = document.getElementById('coachAdaptiveMessage');
-            const actionsEl = document.getElementById('coachAdaptiveActions');
-
-            if (titleEl) titleEl.innerText = adaptation.title;
-            if (msgEl) msgEl.innerText = adaptation.message;
-            if (iconEl) {
-                iconEl.innerText = adaptation.badgeColor === 'emerald' ? '🔥' : '⚠️';
-            }
-
-            // Color theme
-            if (adaptation.badgeColor === 'emerald') {
-                banner.className = 'bg-emerald-950/80 border border-emerald-500/50 rounded-xl p-2.5 shadow-md flex flex-col gap-1.5 transition-all';
-                if (titleEl) titleEl.className = 'text-[11px] font-black text-emerald-400 truncate';
-            } else {
-                banner.className = 'bg-amber-950/80 border border-amber-500/50 rounded-xl p-2.5 shadow-md flex flex-col gap-1.5 transition-all';
-                if (titleEl) titleEl.className = 'text-[11px] font-black text-amber-400 truncate';
-            }
-
-            if (actionsEl && adaptation.actions) {
-                actionsEl.innerHTML = adaptation.actions.map(act => `
-                    <button onclick="handleCoachAdaptiveAction('${act.action}', '${adaptation.id}', ${act.newGradeIdx !== undefined ? act.newGradeIdx : 'null'}, ${act.restSeconds || 0})"
-                        class="flex-1 py-1.5 px-2 rounded-lg ${
-                            act.primary 
-                            ? (adaptation.badgeColor === 'emerald' ? 'bg-emerald-500 text-black font-black' : 'bg-amber-500 text-black font-black')
-                            : 'bg-neutral-800 text-neutral-300 font-bold border border-neutral-700'
-                        } text-[10px] uppercase tracking-wider active:scale-95 transition-all truncate shadow-sm">
-                        ${act.label}
-                    </button>
-                `).join('');
-            }
-
-            banner.classList.remove('hidden');
-        }
-
-        function hideCoachAdaptiveBanner() {
-            const banner = document.getElementById('coachAdaptiveBanner');
-            if (banner) banner.classList.add('hidden');
-        }
-
-        function dismissCoachAdaptiveBanner() {
-            if (typeof Planner !== 'undefined' && Planner.evaluateIntraSessionAdaptation) {
-                const inProgress = {
-                    gradeStr: fontGrades[currentGradeIndex],
-                    tries: tries || 1,
-                    status: (isTop || isFlash) ? 'topped' : 'in_progress'
-                };
-                const adaptation = Planner.evaluateIntraSessionAdaptation(sessionClimbs, coachPhaseIndex, coachPlan, inProgress);
-                if (adaptation) dismissedCoachAdaptationIds.add(adaptation.id);
-            }
-            hideCoachAdaptiveBanner();
-        }
-
-        function handleCoachAdaptiveAction(action, adaptationId, newGradeIdx, restSeconds) {
-            if (adaptationId) dismissedCoachAdaptationIds.add(adaptationId);
-            hideCoachAdaptiveBanner();
-
-            if (action === 'bump_grade' || action === 'drop_grade') {
-                if (newGradeIdx !== null && newGradeIdx !== undefined && newGradeIdx >= 0 && newGradeIdx < fontGrades.length) {
-                    if ('vibrate' in navigator) navigator.vibrate([40, 40, 40]);
-                    if (action === 'bump_grade' && typeof confetti === 'function') {
-                        confetti({ particleCount: 60, spread: 60, origin: { y: 0.6 }, colors: ['#10b981', '#f59e0b'] });
-                    }
-                    if (coachPlan && coachPlan.phases && coachPlan.phases[coachPhaseIndex]) {
-                        coachPlan.phases[coachPhaseIndex].targetGradeIdx = newGradeIdx;
-                        coachPlan.phases[coachPhaseIndex].targetGradeStr = fontGrades[newGradeIdx];
-                    }
-                    currentGradeIndex = newGradeIdx;
-                    const elGrade = document.getElementById('displayGrade');
-                    if (elGrade) elGrade.innerText = fontGrades[currentGradeIndex];
-
-                    updateTrainingHUD();
-                    updateTrainingSessionBanner();
-                    saveActiveSession();
-                }
-            } else if (action === 'advance_phase') {
-                advanceCoachedPhase();
-            } else if (action === 'add_rest') {
-                if ('vibrate' in navigator) navigator.vibrate(20);
-                if (typeof window.adjRestTimer === 'function') {
-                    window.adjRestTimer(restSeconds || 60);
-                    const overlay = document.getElementById('restOverlay');
-                    if (overlay && overlay.classList.contains('hidden')) {
-                        overlay.classList.replace('hidden', 'flex');
-                    }
-                } else {
-                    coachRestRemaining = (coachRestRemaining || 0) + (restSeconds || 60);
-                    updateCoachRestTimerDisplay();
-                    if (!coachRestTimerInterval) toggleCoachRestTimer();
-                }
-            }
-        }
-
-        window.handleCoachAdaptiveAction = handleCoachAdaptiveAction;
-        window.dismissCoachAdaptiveBanner = dismissCoachAdaptiveBanner;
-
-        function startCoachedSession(phaseIdx = 0) {
-            if ('vibrate' in navigator) navigator.vibrate([30, 50, 30]);
-
-            if (!sessionStartTime) {
-                startSession();
-            }
-
-            if (typeof Planner !== 'undefined') {
-                coachPlan = Planner.getTodayPlan();
-            }
-
-            if (!coachPlan || !coachPlan.phases || coachPlan.phases.length === 0) {
-                const warmupIdx = Math.max(0, maxGradeIndex - 6);
-                const midIdx = Math.max(0, maxGradeIndex - 4);
-                const coolIdx = Math.max(0, maxGradeIndex - 8);
-                coachPlan = {
-                    title: "🧗 Daily Climbing Session",
-                    phases: [
-                        { name: "Warmup (20m)", title: "Warmup", desc: `Build gradually from ${fontGrades[warmupIdx]} to ${fontGrades[midIdx]}.`, durationMinutes: 20, restSeconds: 60, targetGradeIdx: warmupIdx, targetGradeStr: fontGrades[warmupIdx], targetTags: ['slab', 'sloper'] },
-                        { name: "Main Phase (45m)", title: "Main Phase", desc: `Work target problems at ${fontGrades[maxGradeIndex]}.`, durationMinutes: 45, restSeconds: 150, targetGradeIdx: maxGradeIndex, targetGradeStr: fontGrades[maxGradeIndex], targetTags: ['powerful', 'crimp'] },
-                        { name: "Cool Down (10m)", title: "Cool Down", desc: `2 easy movement slabs at ${fontGrades[coolIdx]} or below.`, durationMinutes: 10, restSeconds: 60, targetGradeIdx: coolIdx, targetGradeStr: fontGrades[coolIdx], targetTags: ['slab'] }
-                    ]
-                };
-            }
-
-            trainingActive = true;
-            trainingState = 'coach';
-            coachPhaseIndex = Math.max(0, Math.min(coachPlan.phases.length - 1, phaseIdx));
-
-            // Setup current phase settings
-            setupCoachPhase(coachPhaseIndex);
-
-            // Close legacy overlay if open
-            const overlay = document.getElementById('trainingConfigOverlay');
-            if (overlay) overlay.classList.replace('flex', 'hidden');
-
-            updateTrainingHUD();
-            updateTrainingSessionBanner();
-            switchTab('log');
-            saveActiveSession();
-        }
-
-        function setupCoachPhase(index) {
-            if (!coachPlan || !coachPlan.phases || !coachPlan.phases[index]) return;
-            const phase = coachPlan.phases[index];
-
-            hideCoachAdaptiveBanner();
-
-            // Auto-switch mode based on phase type
-            if (phase.type === 'workout' && Array.isArray(phase.exercises) && phase.exercises.length > 0) {
-                const workoutObj = {
-                    id: 'coach_phase_' + index,
-                    name: phase.title || 'Workout Circuit',
-                    shortName: phase.title || 'Workout',
-                    category: 'prehab',
-                    icon: '💪',
-                    badge: 'Coach',
-                    durationMinutes: phase.durationMinutes || 15,
-                    desc: phase.desc || 'Complete the targeted exercise sets recommended by your coach.',
-                    exercises: phase.exercises.map(ex => ({
-                        id: ex.id,
-                        name: ex.name,
-                        sets: typeof ex.sets === 'number' ? ex.sets : 3,
-                        reps: ex.reps || '10 reps',
-                        restSeconds: ex.restSeconds || 60,
-                        desc: ex.desc || '',
-                        completedSets: ex.completedSets || 0
-                    }))
-                };
-                initWorkoutPreset(workoutObj);
-                switchLogMode('workout');
-            } else {
-                switchLogMode('climb');
-            }
-
-            // Set current logger grade to phase target grade if valid
-            if (phase.targetGradeIdx !== null && phase.targetGradeIdx !== undefined) {
-                currentGradeIndex = phase.targetGradeIdx;
-                const elGrade = document.getElementById('displayGrade');
-                if (elGrade) elGrade.innerText = fontGrades[currentGradeIndex];
-            }
-
-            // Pre-select phase tags if available
-            if (phase.targetTags && phase.targetTags.length > 0) {
-                selectedTags = [...phase.targetTags];
-                renderTags();
-            }
-
-            // Configure built-in rest timer for this phase
-            const phaseRest = phase.restSeconds || 120;
-            coachRestRemaining = phaseRest;
-            if (typeof window.setDefaultRestSeconds === 'function') {
-                window.setDefaultRestSeconds(phaseRest);
-            }
-            if (typeof window.cancelRestTimer === 'function' && typeof window.isRestTimerRunning === 'function' && window.isRestTimerRunning()) {
-                window.cancelRestTimer();
-            }
-            if (coachRestTimerInterval) {
-                clearInterval(coachRestTimerInterval);
-                coachRestTimerInterval = null;
-            }
-
-            updateCoachRestTimerDisplay(phaseRest, false, phaseRest);
-            checkIntraSessionAdaptation();
-        }
-
-        function applyCoachTargetGrade() {
-            if (!trainingActive || !coachPlan || !coachPlan.phases || !coachPlan.phases[coachPhaseIndex]) return;
-            const phase = coachPlan.phases[coachPhaseIndex];
-            if (phase.targetGradeIdx !== null && phase.targetGradeIdx !== undefined) {
-                if ('vibrate' in navigator) navigator.vibrate(20);
-                currentGradeIndex = phase.targetGradeIdx;
-                const elGrade = document.getElementById('displayGrade');
-                if (elGrade) elGrade.innerText = fontGrades[currentGradeIndex];
-            }
-        }
-
-        function advanceCoachedPhase() {
-            if (!trainingActive || !coachPlan || !coachPlan.phases) return;
-
-            if (typeof window.cancelRestTimer === 'function') {
-                window.cancelRestTimer();
-            }
-            if (coachRestTimerInterval) {
-                clearInterval(coachRestTimerInterval);
-                coachRestTimerInterval = null;
-            }
-
-            if (coachPhaseIndex < coachPlan.phases.length - 1) {
-                if ('vibrate' in navigator) navigator.vibrate([40, 60, 40]);
-                if (typeof confetti === 'function') {
-                    confetti({
-                        particleCount: 50,
-                        spread: 50,
-                        origin: { y: 0.6 },
-                        colors: ['#10b981', '#3b82f6', '#fbbf24']
-                    });
-                }
-                coachPhaseIndex++;
-                setupCoachPhase(coachPhaseIndex);
-                updateTrainingHUD();
-                updateTrainingSessionBanner();
-                saveActiveSession();
-            } else {
-                // Completed final phase
-                if ('vibrate' in navigator) navigator.vibrate([100, 50, 100, 50, 200]);
-                if (typeof confetti === 'function') {
-                    confetti({
-                        particleCount: 120,
-                        spread: 80,
-                        origin: { y: 0.5 },
-                        colors: ['#10b981', '#f59e0b', '#3b82f6', '#ec4899']
-                    });
-                }
-                trainingState = 'complete';
-                updateTrainingHUD();
-                updateTrainingSessionBanner();
-                saveActiveSession();
-            }
-        }
-
-        function toggleCoachRestTimer() {
-            if ('vibrate' in navigator) navigator.vibrate(20);
-
-            const isRunning = typeof window.isRestTimerRunning === 'function'
-                ? window.isRestTimerRunning()
-                : (coachRestTimerInterval !== null);
-
-            if (isRunning) {
-                // If the timer is already running, tapping toggles the fullscreen rest overlay
-                const overlay = document.getElementById('restOverlay');
-                if (overlay) {
-                    if (overlay.classList.contains('hidden')) {
-                        overlay.classList.replace('hidden', 'flex');
-                    } else {
-                        overlay.classList.replace('flex', 'hidden');
-                    }
-                }
-                return;
-            }
-
-            // Start rest timer using the app's built-in wall-clock timer
-            const phase = coachPlan?.phases?.[coachPhaseIndex];
-            const targetSecs = phase?.restSeconds || (typeof window.getDefaultRestSeconds === 'function' ? window.getDefaultRestSeconds() : 120);
-
-            if (typeof window.startRestTimer === 'function') {
-                window.startRestTimer(targetSecs, true);
-            } else {
-                // Fallback
-                coachRestRemaining = targetSecs;
-                coachRestTimerInterval = setInterval(() => {
-                    coachRestRemaining--;
-                    updateCoachRestTimerDisplay();
-                    if (coachRestRemaining <= 0) {
-                        clearInterval(coachRestTimerInterval);
-                        coachRestTimerInterval = null;
-                        updateCoachRestTimerDisplay();
-                    }
-                }, 1000);
-                updateCoachRestTimerDisplay();
-            }
-        }
-
-        function updateCoachRestTimerDisplay(rem, running, defaultSecs) {
-            const label = document.getElementById('coachRestTimerLabel');
-            const icon = document.getElementById('coachRestTimerIcon');
-            const btn = document.getElementById('coachRestTimerBtn');
-            if (!label) return;
-
-            const isRunning = typeof running === 'boolean'
-                ? running
-                : (typeof window.isRestTimerRunning === 'function' ? window.isRestTimerRunning() : (coachRestTimerInterval !== null));
-
-            const phase = coachPlan?.phases?.[coachPhaseIndex];
-            const phaseRest = phase?.restSeconds || defaultSecs || (typeof window.getDefaultRestSeconds === 'function' ? window.getDefaultRestSeconds() : 120);
-
-            const secs = isRunning
-                ? (typeof rem === 'number' ? rem : (typeof window.getRestTimerRemaining === 'function' ? window.getRestTimerRemaining() : coachRestRemaining))
-                : phaseRest;
-
-            const m = Math.floor(Math.max(0, secs) / 60);
-            const s = (Math.max(0, secs) % 60).toString().padStart(2, '0');
-
-            if (isRunning) {
-                label.innerText = `${m}:${s}`;
-                if (btn) {
-                    btn.classList.add('bg-emerald-600/30', 'border-emerald-500/50', 'text-emerald-400');
-                    btn.classList.remove('bg-neutral-800', 'text-white');
-                }
-                if (icon) icon.innerText = "⏳";
-            } else {
-                label.innerText = `Rest ${m}:${s}`;
-                if (btn) {
-                    btn.classList.remove('bg-emerald-600/30', 'border-emerald-500/50', 'text-emerald-400');
-                    btn.classList.add('bg-neutral-800', 'text-white');
-                }
-                if (icon) icon.innerText = "⏱️";
-            }
-        }
-
-        // Global callback connection for chart.js rest timer
-        window.onRestTimerTick = (rem, running, defaultSecs) => {
-            coachRestRemaining = rem;
-            updateCoachRestTimerDisplay(rem, running, defaultSecs);
-        };
-
-        function forfeitTraining() {
-            if (confirm("End today's guided coach workout? You can continue free logging!")) {
-                endTraining();
-            }
-        }
-
-        function endTraining() {
-            if ('vibrate' in navigator) navigator.vibrate(30);
-
-            if (typeof window.cancelRestTimer === 'function') {
-                window.cancelRestTimer();
-            }
-            if (coachRestTimerInterval) {
-                clearInterval(coachRestTimerInterval);
-                coachRestTimerInterval = null;
-            }
-            if (trainingTimerInterval) {
-                clearInterval(trainingTimerInterval);
-                trainingTimerInterval = null;
-            }
-
-            trainingActive = false;
-            trainingState = 'climb';
-
-            hideCoachAdaptiveBanner();
-            dismissedCoachAdaptationIds.clear();
-
-            updateTrainingHUD();
-            updateTrainingSessionBanner();
-            updateUI();
-            saveActiveSession();
-        }
-
-        function updateTrainingHUD() {
-            const hud = document.getElementById('trainingHUD');
-            if (!hud) return;
-
-            const activePanel = document.getElementById('coachHUDActive');
-            const completePanel = document.getElementById('coachHUDComplete');
-
-            if (!trainingActive) {
-                hud.classList.add('hidden');
-                return;
-            }
-
-            hud.classList.remove('hidden');
-
-            if (trainingState === 'complete') {
-                if (activePanel) activePanel.classList.add('hidden');
-                if (completePanel) completePanel.classList.remove('hidden');
-                return;
-            }
-
-            if (activePanel) activePanel.classList.remove('hidden');
-            if (completePanel) completePanel.classList.add('hidden');
-
-            if (!coachPlan || !coachPlan.phases || !coachPlan.phases[coachPhaseIndex]) {
-                if (typeof Planner !== 'undefined') coachPlan = Planner.getTodayPlan();
-            }
-            const phase = coachPlan?.phases?.[coachPhaseIndex] || {
-                title: "Warmup Pyramid",
-                desc: "Build gradually.",
-                targetGradeStr: "6A",
-                targetTags: ["slab"]
-            };
-
-            // 1. Phase Indicator
-            const ind = document.getElementById('coachPhaseIndicator');
-            if (ind && coachPlan && coachPlan.phases) {
-                ind.innerText = `${coachPhaseIndex + 1} of ${coachPlan.phases.length}`;
-            }
-
-            // 2. Dots
-            const dotsEl = document.getElementById('coachPhaseDots');
-            if (dotsEl && coachPlan && coachPlan.phases) {
-                dotsEl.innerHTML = coachPlan.phases.map((_, i) => `
-                    <div class="flex-1 h-1.5 rounded-full transition-all duration-300 ${
-                        i < coachPhaseIndex ? 'bg-emerald-500' :
-                        i === coachPhaseIndex ? 'bg-emerald-400 ring-2 ring-emerald-400/40 shadow-sm' : 'bg-neutral-800'
-                    }"></div>
-                `).join('');
-            }
-
-            // 3. Phase Title & Details
-            const titleEl = document.getElementById('coachPhaseTitle');
-            const durEl = document.getElementById('coachPhaseDuration');
-            const descEl = document.getElementById('coachPhaseDesc');
-            if (titleEl) titleEl.innerText = phase.title || phase.name;
-            if (durEl) durEl.innerText = phase.durationMinutes ? `${phase.durationMinutes}m` : '';
-            if (descEl) descEl.innerText = phase.desc || '';
-
-            // 4. Target Grade
-            const targetBtn = document.getElementById('coachTargetGradeBtn');
-            const targetGrade = document.getElementById('coachTargetGrade');
-            if (phase.targetGradeStr) {
-                if (targetBtn) targetBtn.classList.remove('hidden');
-                if (targetGrade) targetGrade.innerText = phase.targetGradeStr;
-            } else {
-                if (targetBtn) targetBtn.classList.add('hidden');
-            }
-
-            // 5. Focus Tags
-            const focusTags = document.getElementById('coachFocusTags');
-            if (focusTags) {
-                if (phase.targetTags && phase.targetTags.length > 0) {
-                    focusTags.innerHTML = phase.targetTags.map(t => `
-                        <button onclick="toggleTag('${t}')" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-md border transition-all ${
-                            selectedTags.includes(t)
-                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                                : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
-                        }">${t}</button>
-                    `).join('');
-                } else {
-                    focusTags.innerHTML = `<span class="text-[9px] text-neutral-600">All movement styles</span>`;
-                }
-            }
-
-            // 6. Next Phase Button Label
-            const nextLabel = document.getElementById('coachNextPhaseBtnLabel');
-            if (nextLabel && coachPlan && coachPlan.phases) {
-                if (coachPhaseIndex >= coachPlan.phases.length - 1) {
-                    nextLabel.innerText = "Finish Workout";
-                } else {
-                    nextLabel.innerText = "Next Phase";
-                }
-            }
-        }
-
-        function updateTrainingSessionBanner() {
-            const banner = document.getElementById('trainingSessionBanner');
-            const card = document.getElementById('trainingLaunchCard');
-            if (!banner || !card) return;
-
-            if (trainingActive) {
-                banner.classList.remove('hidden');
-                card.classList.add('hidden');
-
-                const phase = coachPlan?.phases?.[coachPhaseIndex];
-                const phaseNameEl = document.getElementById('trainingBannerPhaseName');
-                const gradeBanner = document.getElementById('trainingBannerGrade');
-
-                if (phaseNameEl) phaseNameEl.innerText = phase ? (phase.title || phase.name) : 'Guided Phase';
-                if (gradeBanner) gradeBanner.innerText = phase?.targetGradeStr || fontGrades[currentGradeIndex];
-            } else {
-                banner.classList.add('hidden');
-                card.classList.remove('hidden');
-            }
-        }
-
-        function restoreTrainingUI() {
-            updateTrainingHUD();
-            updateTrainingSessionBanner();
-        }
-
-        // Backward compatibility mappings
-        function openTrainingConfig() { startCoachedSession(); }
-        function closeTrainingConfig() {}
-        function adjTrainingStartGrade() {}
-        function setTrainingFocus() {}
-        function startTrainingMode() { startCoachedSession(); }
-        function startTrainingClimbTimer() {}
-        function handleTrainingTimeout() {}
-        function handleTrainingRungComplete() { advanceCoachedPhase(); }
-
-        // Expose functions globally to be called from index.html onclick handlers
-        window.startCoachedSession = startCoachedSession;
-        window.advanceCoachedPhase = advanceCoachedPhase;
-        window.applyCoachTargetGrade = applyCoachTargetGrade;
-        window.toggleCoachRestTimer = toggleCoachRestTimer;
-        window.forfeitTraining = forfeitTraining;
-        window.endTraining = endTraining;
-        window.openTrainingConfig = startCoachedSession;
-        window.startTrainingMode = startCoachedSession;
-        window.startTrainingClimbTimer = startTrainingClimbTimer;
-        window.restoreTrainingUI = restoreTrainingUI;
+        // Global exports for modal & card interactions
+        window.openAddModal = openAddModal;
+        window.openEditRouteModal = openEditRouteModal;
+        window.openEditWorkoutModal = openEditWorkoutModal;
+        window.closeLogModal = closeLogModal;
+        window.switchLogModalMode = switchLogModalMode;
+        window.adjModalGrade = adjModalGrade;
+        window.setModalColorTag = setModalColorTag;
+        window.toggleModalStyleTag = toggleModalStyleTag;
+        window.adjModalTries = adjModalTries;
+        window.setModalCompletion = setModalCompletion;
+        window.submitModalClimb = submitModalClimb;
+        window.saveModalClimbEdits = saveModalClimbEdits;
+        window.deleteModalClimb = deleteModalClimb;
+        window.selectModalWorkoutPreset = selectModalWorkoutPreset;
+        window.adjModalWorkoutWeight = adjModalWorkoutWeight;
+        window.adjModalWorkoutReps = adjModalWorkoutReps;
+        window.toggleModalWorkoutSet = toggleModalWorkoutSet;
+        window.logWorkoutSetAndRest = logWorkoutSetAndRest;
+        window.saveModalWorkoutToSession = saveModalWorkoutToSession;
+        window.deleteModalWorkout = deleteModalWorkout;
+        window.quickAdjustTries = quickAdjustTries;
+        window.quickRecordRouteBurn = quickRecordRouteBurn;
+        window.quickSetCompletion = quickSetCompletion;
+        window.removeClimb = removeClimb;
+        window.cycleCoachRecommendation = cycleCoachRecommendation;
+        window.applyCoachRecommendation = applyCoachRecommendation;
+
+        // Legacy no-op stubs
+        window.startCoachedSession = () => openAddModal('climb');
+        window.advanceCoachedPhase = () => {};
+        window.applyCoachTargetGrade = applyCoachRecommendation;
+        window.toggleCoachRestTimer = () => typeof startRestTimer === 'function' ? startRestTimer() : null;
+        window.forfeitTraining = () => {};
+        window.endTraining = () => {};
+        window.openTrainingConfig = () => openAddModal('climb');
+        window.startTrainingMode = () => openAddModal('climb');
+        window.startTrainingClimbTimer = () => {};
+        window.restoreTrainingUI = () => {};
+        window.dismissCoachAdaptiveBanner = () => {};
+        window.checkIntraSessionAdaptation = () => updateCoachRecommendation();
 
         function endSession() {
             const hasCompletedWorkouts = sessionWorkouts && sessionWorkouts.some(w => (w.exercises || []).some(e => (e.completedSets || 0) > 0));
@@ -2792,24 +3433,7 @@
                 }
             }
 
-            if (trainingActive) {
-                if (coachRestTimerInterval) {
-                    clearInterval(coachRestTimerInterval);
-                    coachRestTimerInterval = null;
-                }
-                if (trainingTimerInterval) clearInterval(trainingTimerInterval);
-                trainingActive = false;
-                trainingState = 'climb';
-                coachPhaseIndex = 0;
-                const hud = document.getElementById('trainingHUD');
-                if (hud) hud.classList.add('hidden');
-                const banner = document.getElementById('trainingSessionBanner');
-                if (banner) banner.classList.add('hidden');
-                const card = document.getElementById('trainingLaunchCard');
-                if (card) card.classList.remove('hidden');
-            }
-
-            const durationSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
+            const durationSeconds = sessionStartTime ? Math.min(43200, Math.max(0, Math.floor((Date.now() - sessionStartTime) / 1000))) : 0;
             boulderHistory.push({
                 date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
                 timestamp: Date.now(),
@@ -2873,7 +3497,6 @@
             sessionStartTime = null;
             DOM.sessionScoreStr.classList.remove('animate-score-pulse');
             if (DOM.sessionTimerStr) {
-                DOM.sessionTimerStr.classList.add('hidden');
                 DOM.sessionTimerStr.innerText = "00:00:00";
             }
             
@@ -2911,11 +3534,9 @@
         }
 
         function switchTab(tabId, push = true) {
+            if (tabId === 'log' || tabId === 'planner') tabId = 'session';
             const pageEl = document.getElementById(`page-${tabId}`);
             if (pageEl) pageEl.scrollIntoView({ behavior: 'smooth', inline: 'start' });
-            if (tabId === 'planner' && typeof renderPlannerUI === 'function') {
-                renderPlannerUI();
-            }
             if (push) {
                 history.pushState({ tab: tabId }, '', '#' + tabId);
                 if ('vibrate' in navigator) navigator.vibrate(5);
@@ -2927,7 +3548,7 @@
                 if (entry.isIntersecting) {
                     const tabId = entry.target.id.replace('page-', '');
                     
-                    ['log', 'session', 'planner', 'history', 'leaderboard'].forEach(id => {
+                    ['session', 'history', 'leaderboard'].forEach(id => {
                         const navEl = document.getElementById(`nav-${id}`);
                         if(navEl) navEl.classList.replace('text-emerald-500', 'text-neutral-500');
                     });
@@ -2984,20 +3605,20 @@
             } else {
                 // If we hit back and there's no state, we might be at the browser's initial entry.
                 // To prevent gray screen, we force 'log' view and push it back to the history if possible.
-                switchTab('log', false);
-                if (!state) history.replaceState({ tab: 'log' }, '', '#log');
+                switchTab('session', false);
+                if (!state) history.replaceState({ tab: 'session' }, '', '#session');
             }
         });
 
         // Initialize first state
         if (!history.state) {
-            history.replaceState({ tab: 'log' }, '', '#log');
+            history.replaceState({ tab: 'session' }, '', '#session');
         } else if (history.state.tab) {
             switchTab(history.state.tab, false);
         }
 
         setTimeout(() => {
-            ['log', 'session', 'planner', 'history', 'leaderboard'].forEach(id => {
+            ['session', 'history', 'leaderboard'].forEach(id => {
                 const el = document.getElementById(`page-${id}`);
                 if(el) tabObserver.observe(el);
             });
@@ -3035,6 +3656,10 @@
                 if (typeof updateAnalytics === 'function') updateAnalytics();
                 if (typeof renderHistoryList === 'function') renderHistoryList();
                 if (typeof renderPlannerUI === 'function') renderPlannerUI();
+                if (typeof updateCoachRecommendation === 'function') updateCoachRecommendation();
+                if (typeof renderSessionList === 'function') renderSessionList();
+                if (typeof updateSessionMetrics === 'function') updateSessionMetrics();
+                toggleSessionButtonUI(!!sessionStartTime);
 
                 // Sanity check for achievements
                 if (boulderHistory && boulderHistory.length >= 5) unlockAchievement('consistency');

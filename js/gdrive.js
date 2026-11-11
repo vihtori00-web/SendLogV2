@@ -401,7 +401,9 @@
                         localStorage.setItem('boulderHistory', JSON.stringify(data.history));
                         boulderHistory = data.history;
                     }
-                    if (data.maxGradeIndex !== undefined) localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
+                    if (data.maxGradeIndex !== undefined && data.maxGradeIndex !== null && data.maxGradeIndex !== 'null') {
+                        localStorage.setItem('boulderMaxGradeIndex', data.maxGradeIndex);
+                    }
                     if (data.playerName) localStorage.setItem('boulderPlayerName', data.playerName);
                     if (data.achievements) localStorage.setItem('boulderAchievements', JSON.stringify(data.achievements));
                     if (data.calibration) localStorage.setItem('sendlog_v2_calibration', JSON.stringify(data.calibration));

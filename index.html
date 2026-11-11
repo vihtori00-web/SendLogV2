@@ -39,6 +39,27 @@
             transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
+        @keyframes modalSlideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes modalZoomIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .animate-modal-up {
+            animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .animate-modal-zoom {
+            animation: modalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .bg-neutral-850 {
+            background-color: #202020;
+        }
+        .hover\:bg-neutral-750:hover {
+            background-color: #333333;
+        }
+
     </style>
 </head>
 
@@ -173,7 +194,7 @@
         <header class="p-5 border-b border-neutral-800 flex justify-between items-center z-10 shrink-0">
             <div class="flex flex-col">
                 <h1 class="text-2xl font-black tracking-widest bg-gradient-to-r from-emerald-400 to-cyan-500 bg-clip-text text-transparent">SEND<span class="text-white">LOG</span></h1>
-                <span class="app-version-text text-[8px] text-emerald-400 font-bold tracking-widest">v2.0 (AI Coach)</span>
+                <span class="app-version-text text-[8px] text-emerald-400 font-bold tracking-widest">v2.2</span>
             </div>
 
             <div class="flex items-center gap-2">
@@ -195,488 +216,129 @@
 
         <main id="mainContainer" class="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory pb-24 relative">
 
-            <section id="page-log" class="p-4 flex flex-col justify-between w-full shrink-0 h-full overflow-y-auto snap-center snap-always relative gap-3">
-
-                <!-- Coach-Guided Session HUD (Compact & Ergonomic) -->
-                <div id="trainingHUD" class="hidden bg-neutral-900/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl overflow-hidden shadow-xl shrink-0 p-3 transition-all">
-                    <!-- Active Coach Phase View -->
-                    <div id="coachHUDActive" class="flex flex-col space-y-2">
-                        <!-- Row 1: Badge + Phase Title + Target Grade Pill + Exit -->
-                        <div class="flex items-center justify-between gap-2">
+            <section id="page-session" class="p-4 sm:p-5 flex flex-col w-full shrink-0 h-[100%] overflow-hidden snap-center snap-always relative pb-20 sm:pb-24">
+                
+                <!-- TOP ROW: COACH RECOMMENDATION (Left) + SESSION TIMER & SCORE (Right) -->
+                <div class="grid grid-cols-2 gap-3 mb-3 shrink-0">
+                    <!-- Left: Coach Recommendation Widget (Pressable for Analysis) -->
+                    <div id="coachRecommendationCard" class="bg-neutral-900/90 rounded-[1.75rem] p-3 sm:p-3.5 border border-neutral-800 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                        <div class="flex items-center justify-between gap-1 mb-1">
                             <div class="flex items-center gap-1.5 min-w-0">
-                                <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider shrink-0">🎯 Phase <span id="coachPhaseIndicator">1 of 4</span></span>
-                                <h4 id="coachPhaseTitle" class="text-xs font-black text-white truncate">Warmup Pyramid</h4>
-                                <span id="coachPhaseDuration" class="text-[9px] font-bold text-neutral-400 uppercase shrink-0">25m</span>
+                                <span id="coachRecIcon" class="text-xs shrink-0">🤖</span>
+                                <span id="coachRecCategory" class="text-[9px] font-black uppercase tracking-wider text-emerald-400 truncate">Coach Suggestion</span>
                             </div>
                             <div class="flex items-center gap-1.5 shrink-0">
-                                <button onclick="applyCoachTargetGrade()" id="coachTargetGradeBtn" title="Tap to snap logger to target" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/20 border border-orange-500/40 text-orange-400 active:scale-95 transition-all text-xs font-black">
-                                    <span class="text-[8px] uppercase text-orange-300 font-bold">Target</span>
-                                    <span id="coachTargetGrade">6A</span>
-                                </button>
-                                <button onclick="forfeitTraining()" class="text-[10px] font-bold text-neutral-500 hover:text-red-400 active:scale-95 px-2 py-1 rounded-md bg-neutral-800">✕</button>
+                                <button type="button" onclick="cycleCoachRecommendation()" title="Suggest alternative" class="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded-lg bg-neutral-800/80 border border-neutral-700/60 active:scale-90 text-xs transition-transform">↻</button>
+                                <button type="button" onclick="openCoachDetailModal()" title="View coach rationale & science" class="w-7 h-7 flex items-center justify-center text-cyan-400 hover:text-cyan-300 rounded-lg bg-cyan-500/10 border border-cyan-500/30 active:scale-90 text-xs font-black transition-transform">ℹ️</button>
                             </div>
                         </div>
 
-                        <!-- Row 2: Phase Instructions -->
-                        <p id="coachPhaseDesc" class="text-[11px] text-neutral-300 leading-snug"></p>
-
-                        <!-- Dynamic Coach Performance Adaptation Banner -->
-                        <div id="coachAdaptiveBanner" class="hidden bg-neutral-950/90 border border-emerald-500/40 rounded-xl p-2.5 shadow-md flex flex-col gap-1.5 transition-all">
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-1.5 min-w-0">
-                                    <span id="coachAdaptiveIcon" class="text-xs">🔥</span>
-                                    <h5 id="coachAdaptiveTitle" class="text-[11px] font-black text-emerald-400 truncate">Project Sent!</h5>
+                        <!-- Pressable Body: Tap to open Coach Analysis Modal -->
+                        <button type="button" onclick="openCoachDetailModal()" class="w-full text-left my-0.5 group-hover:opacity-95 active:scale-[0.98] transition-all flex flex-col gap-1 rounded-xl focus:outline-none">
+                            <div class="flex items-baseline justify-between gap-1">
+                                <div class="flex items-baseline gap-1.5 min-w-0">
+                                    <span id="coachRecGrade" class="text-xl sm:text-2xl font-black text-emerald-400 leading-none">6A</span>
+                                    <span id="coachRecTitle" class="text-xs font-black text-white truncate">Warmup Flow</span>
                                 </div>
-                                <button onclick="dismissCoachAdaptiveBanner()" class="text-neutral-500 hover:text-white active:scale-90 text-[10px] px-1.5 py-0.5 rounded bg-neutral-800">✕</button>
+                                <span class="text-[8px] font-bold text-cyan-400 flex items-center gap-0.5 shrink-0">Analysis ↗</span>
                             </div>
-                            <p id="coachAdaptiveMessage" class="text-[10px] text-neutral-300 leading-tight"></p>
-                            <div id="coachAdaptiveActions" class="flex items-center gap-2 pt-1">
-                                <!-- Action Buttons injected here -->
+                            <div id="coachRecTags" class="flex gap-1 flex-wrap">
+                                <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">slab</span>
                             </div>
-                        </div>
-
-                        <!-- Row 3: Action Buttons (Rest Timer + Next Phase) -->
-                        <div class="flex items-center gap-2 pt-1 border-t border-neutral-800/80">
-                            <button id="coachRestTimerBtn" onclick="toggleCoachRestTimer()" class="flex-1 py-2 px-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all border border-neutral-700">
-                                <span id="coachRestTimerIcon">⏱️</span>
-                                <span id="coachRestTimerLabel">Rest 1:30</span>
-                            </button>
-                            <button id="coachNextPhaseBtn" onclick="advanceCoachedPhase()" class="flex-1 py-2 px-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all">
-                                <span id="coachNextPhaseBtnLabel">Next Phase</span>
-                                <span>⏭️</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Workout Complete State -->
-                    <div id="coachHUDComplete" class="hidden p-4 text-center space-y-2">
-                        <div class="text-2xl">🎉</div>
-                        <h4 class="text-sm font-black text-emerald-400">Coach Workout Complete!</h4>
-                        <p class="text-[11px] text-neutral-400">Great execution. You completed all prescribed phases. Continue logging freely or wrap up.</p>
-                        <button onclick="endTraining()" class="w-full py-2.5 rounded-xl bg-neutral-800 text-white font-black uppercase tracking-wider text-xs active:scale-95 transition-all border border-neutral-700">Return to Free Log</button>
-                    </div>
-
-                    <!-- Hidden legacy stubs for safe fallback -->
-                    <div id="coachPhaseDots" class="hidden"></div>
-                    <div id="coachFocusTagsContainer" class="hidden"><div id="coachFocusTags"></div></div>
-                    <div id="trainingHUDPrepare" class="hidden"></div>
-                    <div id="trainingHUDClimb" class="hidden"></div>
-                    <div id="trainingHUDTimeout" class="hidden"><span id="trainingPeakDisplay"></span></div>
-                </div>
-
-                <!-- Log Mode Switcher (Climbing vs Workout) -->
-                <div id="logModeSwitcher" class="flex items-center justify-center p-1 bg-neutral-950/90 rounded-2xl border border-neutral-800 shrink-0 self-center shadow-md">
-                    <button id="modeBtnClimb" onclick="switchLogMode('climb')" class="px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-emerald-500 text-black shadow-sm flex items-center gap-1.5">
-                        <span>🧗</span>
-                        <span>Climb</span>
-                    </button>
-                    <button id="modeBtnWorkout" onclick="switchLogMode('workout')" class="px-5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all text-neutral-400 hover:text-white flex items-center gap-1.5">
-                        <span>💪</span>
-                        <span>Workout</span>
-                    </button>
-                </div>
-
-                <!-- Climbing Mode Controls Wrapper -->
-                <div id="climbingControlsWrapper" class="flex flex-col flex-1 justify-between gap-3">
-                    <!-- Grade Control (Top) -->
-                    <div id="gradeControlContainer" class="bg-neutral-900/90 rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-between py-3.5 px-6 relative select-none touch-manipulation shadow-lg flex-1 min-h-[7.5rem] max-h-[11rem]">
-                        <span class="text-neutral-500 text-[10px] font-black uppercase tracking-[0.2em] pointer-events-none">Font Grade</span>
-                        <div class="flex items-center justify-between w-full my-auto">
-                            <button id="gradeDecBtn" onclick="adjGrade(-1)" class="w-14 h-14 flex items-center justify-center text-neutral-500 hover:text-white active:scale-90 active:text-emerald-400 transition-all outline-none">
-                                <span class="text-4xl font-black leading-none">&minus;</span>
-                            </button>
-                            <span id="displayGrade" class="text-5xl sm:text-6xl font-black tracking-tighter text-white drop-shadow-lg leading-none select-none">6A</span>
-                            <button id="gradeIncBtn" onclick="adjGrade(1)" class="w-14 h-14 flex items-center justify-center text-neutral-500 hover:text-white active:scale-90 active:text-emerald-400 transition-all outline-none">
-                                <span class="text-4xl font-black leading-none">+</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Attempts Control (Bottom) -->
-                    <div id="attemptsControlContainer" class="bg-neutral-900/90 rounded-[2rem] border border-neutral-800 flex flex-col items-center justify-between py-3 px-6 relative select-none touch-manipulation shadow-lg flex-1 min-h-[6.5rem] max-h-[9.5rem]">
-                        <span class="text-neutral-500 text-[10px] font-black uppercase tracking-[0.2em] pointer-events-none">Attempts</span>
-                        <div class="flex items-center justify-between w-full my-auto">
-                            <button onclick="adjTries(-1)" class="w-14 h-14 flex items-center justify-center text-neutral-500 hover:text-white active:scale-90 active:text-emerald-400 transition-all outline-none">
-                                <span class="text-4xl font-black leading-none">&minus;</span>
-                            </button>
-                            <span id="displayTries" class="text-4xl sm:text-5xl font-black tracking-tighter text-white drop-shadow-lg leading-none select-none">1</span>
-                            <button onclick="adjTries(1)" class="w-14 h-14 flex items-center justify-center text-neutral-500 hover:text-white active:scale-90 active:text-emerald-400 transition-all outline-none">
-                                <span class="text-4xl font-black leading-none">+</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Actions Row: Send Toggle + Quick Burn & Rest -->
-                    <div class="grid grid-cols-2 gap-3 shrink-0 h-14 sm:h-16 select-none">
-                        <!-- Send Status Toggle -->
-                        <button id="btnTop" onclick="toggleTop()"
-                            class="rounded-[1.5rem] bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md h-full">
-                            <span>🧗</span>
-                            <span>Topped?</span>
+                            <p id="coachRecAdvice" class="text-[10px] text-neutral-400 leading-tight line-clamp-2 mt-0.5">Warm up pulleys with easy, precise footwork.</p>
                         </button>
 
-                        <!-- Quick Burn Action -->
-                        <button id="btnQuickBurn" onclick="quickRecordBurn()"
-                            class="rounded-[1.5rem] bg-neutral-900 hover:bg-neutral-850 border border-neutral-800 active:border-emerald-500/40 text-neutral-300 hover:text-white font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md h-full">
-                            <span>⏱️</span>
-                            <span>+1 Burn & Rest</span>
-                        </button>
-                    </div>
-
-                    <!-- Style Tags Container (Closer Together, No Text Clipping) -->
-                    <div class="flex flex-col gap-1.5 shrink-0 select-none">
-                        <span class="text-neutral-500 text-[10px] font-black uppercase tracking-[0.2em] px-1 text-center">Style Tags</span>
-                        <div id="tagContainer" class="flex flex-wrap justify-center gap-1.5 px-1">
-                            <!-- Dynamic style tags injected by renderTags() -->
+                        <!-- Quick Finger Readiness Pill & Add Route -->
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <button type="button" onclick="openCoachDetailModal('checkin')" title="Log how fingers and skin feel" class="flex-1 py-1.5 px-2 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-[9px] font-bold text-neutral-300 flex items-center justify-between active:scale-95 transition-all">
+                                <span class="flex items-center gap-1 min-w-0 truncate">
+                                    <span id="coachQuickFingerIcon" class="shrink-0">⚡</span>
+                                    <span id="coachQuickFingerText" class="truncate">Fresh</span>
+                                </span>
+                                <span class="text-[7.5px] text-neutral-500 font-mono shrink-0 ml-1">EDIT ▾</span>
+                            </button>
+                            <button type="button" onclick="applyCoachRecommendation()" class="py-1.5 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[9.5px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm shrink-0">
+                                <span>+ Log</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Log Climb Button Container -->
-                    <div id="submitButtonContainer" class="shrink-0 pt-0.5 pb-2">
-                        <button onclick="logClimb()" id="mainAddButton"
-                            class="w-full h-16 sm:h-[4.5rem] rounded-[2rem] bg-emerald-500 text-black font-black uppercase tracking-[0.25em] text-base sm:text-lg shadow-xl shadow-emerald-500/25 active:scale-[0.98] transition-all outline-none flex items-center justify-center gap-2.5">
-                            <span>🧗</span>
-                            <span>Log Climb</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Interactive Off-Wall Workout Container (Hidden by default, shown when mode is 'workout') -->
-                <div id="workoutModeContainer" class="hidden flex-col justify-between flex-1 gap-3">
-                    <!-- Quick Horizontal Preset Chips (1-tap switch) -->
-                    <div id="workoutTypeQuickSelector" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
-                        <button onclick="selectWorkoutPreset('bench_press')" id="quickChip_bench_press" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm">🏋️ Bench Press</button>
-                        <button onclick="selectWorkoutPreset('antagonist_armor')" id="quickChip_antagonist_armor" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🛡️ Antagonist</button>
-                        <button onclick="selectWorkoutPreset('repeaters_7_3')" id="quickChip_repeaters_7_3" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">⚡ Repeaters</button>
-                        <button onclick="selectWorkoutPreset('max_hangs')" id="quickChip_max_hangs" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🧗 Max Hangs</button>
-                        <button onclick="selectWorkoutPreset('climber_core')" id="quickChip_climber_core" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">💪 Core</button>
-                        <button onclick="selectWorkoutPreset('mobility_flow')" id="quickChip_mobility_flow" class="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🧘 Mobility</button>
-                    </div>
-
-                    <div class="bg-neutral-900/95 border border-neutral-800 rounded-[2rem] p-5 shadow-lg flex flex-col justify-between flex-1">
-                        <div>
-                            <div class="flex items-center justify-between gap-2 mb-2">
-                                <span id="workoutExCategoryBadge" class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Strength</span>
-                                <span id="workoutExProgress" class="text-[10px] font-mono text-neutral-400 font-bold">Exercise 1 of 4</span>
+                    <!-- Right: Session Timer & Score Widget (Clean, Modern & High-Density) -->
+                    <div id="sessionTimerWidget" class="bg-neutral-900/90 rounded-[1.75rem] p-3 sm:p-3.5 border border-neutral-800 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                        <div class="flex items-center justify-between gap-1 mb-1">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <span class="text-xs shrink-0">⏱️</span>
+                                <span class="text-[9px] font-black uppercase tracking-wider text-neutral-400">Session</span>
                             </div>
-                            <h3 id="workoutExTitle" class="text-xl sm:text-2xl font-black text-white leading-tight">Barbell Bench Press</h3>
-                            <p id="workoutExTarget" class="text-xs font-bold text-emerald-400 mt-1">4 sets × 6 reps</p>
-                            <p id="workoutExDesc" class="text-xs text-neutral-400 leading-snug mt-2">Touch chest with control, drive upward with active scapular retraction.</p>
+                            <div id="sessionStatusBadge" class="flex items-center gap-1.5 text-[9px] font-black uppercase text-neutral-400 bg-neutral-950 px-2 py-0.5 rounded-full border border-neutral-800">
+                                <span id="sessionStatusDot" class="w-1.5 h-1.5 rounded-full bg-neutral-500"></span>
+                                <span id="sessionStatusText">Ready</span>
+                            </div>
                         </div>
 
-                        <!-- Weight & Reps Stepper (Active when exercise tracks weight) -->
-                        <div id="workoutWeightRepsContainer" class="hidden my-3 p-3 bg-neutral-950/90 rounded-2xl border border-neutral-800 flex flex-col gap-2.5 shadow-inner">
-                            <div class="flex items-center justify-between gap-2">
-                                <!-- Weight Stepper -->
-                                <div class="flex-1 flex flex-col items-center">
-                                    <span class="text-[9px] uppercase font-black tracking-wider text-neutral-500 mb-1">Weight</span>
-                                    <div class="flex items-center gap-1">
-                                        <button type="button" onclick="adjWorkoutWeight(-2.5)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">-</button>
-                                        <div class="flex items-baseline bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800">
-                                            <input type="number" id="workoutInputWeight" step="0.5" min="0" max="400" value="60" onchange="setWorkoutWeight(this.value)" class="w-12 bg-transparent text-center font-black text-white text-base focus:outline-none">
-                                            <span class="text-[10px] text-neutral-400 font-bold ml-0.5">kg</span>
-                                        </div>
-                                        <button type="button" onclick="adjWorkoutWeight(2.5)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">+</button>
-                                    </div>
-                                    <div class="flex items-center gap-1 mt-1">
-                                        <button type="button" onclick="adjWorkoutWeight(-5)" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">-5</button>
-                                        <button type="button" onclick="adjWorkoutWeight(5)" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">+5</button>
-                                    </div>
-                                </div>
-
-                                <div class="w-px h-10 bg-neutral-800 self-center"></div>
-
-                                <!-- Reps Stepper -->
-                                <div class="flex-1 flex flex-col items-center">
-                                    <span class="text-[9px] uppercase font-black tracking-wider text-neutral-500 mb-1">Target Reps</span>
-                                    <div class="flex items-center gap-1">
-                                        <button type="button" onclick="adjWorkoutReps(-1)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">-</button>
-                                        <div class="flex items-baseline bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800">
-                                            <input type="number" id="workoutInputReps" min="1" max="100" value="6" onchange="setWorkoutReps(this.value)" class="w-10 bg-transparent text-center font-black text-white text-base focus:outline-none">
-                                            <span class="text-[10px] text-neutral-400 font-bold ml-0.5">reps</span>
-                                        </div>
-                                        <button type="button" onclick="adjWorkoutReps(1)" class="w-8 h-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white font-black text-sm active:scale-95 transition-all">+</button>
-                                    </div>
+                        <!-- Center: Prominent Mono Timer & Micro Stats -->
+                        <div class="flex flex-col gap-1.5 my-0.5">
+                            <div class="flex items-baseline justify-between">
+                                <span id="sessionTimerDisplay" class="text-xl sm:text-2xl font-mono font-black text-white tracking-tight leading-none">00:00:00</span>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="text-[8px] font-black text-neutral-500 uppercase">Pts</span>
+                                    <span id="sessionScoreDisplay" class="text-base sm:text-lg font-black text-emerald-400 leading-none">0</span>
                                 </div>
                             </div>
-
-                            <!-- PR & Quick History Link -->
-                            <div class="flex items-center justify-between pt-2 border-t border-neutral-800/80 text-[10px]">
-                                <span id="workoutExPRBadge" class="font-bold text-amber-400 truncate">🏆 PR: --</span>
-                                <button type="button" onclick="openExerciseProgressModal()" class="font-bold text-emerald-400 hover:underline flex items-center gap-1">
-                                    <span>📈</span>
-                                    <span>History</span>
-                                </button>
+                            <div class="grid grid-cols-3 gap-1 bg-neutral-950/70 p-1.5 rounded-xl border border-neutral-800/80 text-center">
+                                <div class="flex flex-col">
+                                    <span id="sessionSendsCount" class="text-[11px] font-black text-cyan-400 leading-none">0</span>
+                                    <span class="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider mt-0.5">Sends</span>
+                                </div>
+                                <div class="flex flex-col border-x border-neutral-800/80">
+                                    <span id="sessionBurnsCount" class="text-[11px] font-black text-neutral-200 leading-none">0</span>
+                                    <span class="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider mt-0.5">Burns</span>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span id="sessionLoadDisplay" class="text-[11px] font-black text-amber-400 leading-none">0 TL</span>
+                                    <span class="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider mt-0.5">Load</span>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Interactive Hang Controller (Displayed when exercise is a hanging workout) -->
-                        <div id="workoutHangController" class="hidden flex-col gap-2.5 my-2.5 p-3.5 bg-neutral-950/90 rounded-2xl border border-emerald-500/30 shadow-[0_0_25px_rgba(16,185,129,0.12)]">
-                            <button id="btnStartHangWorkout" type="button" onclick="startHangTimer()" class="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-black font-black uppercase tracking-[0.2em] text-sm sm:text-base shadow-xl shadow-emerald-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5">
-                                <span class="text-xl">🚀</span>
-                                <span id="btnStartHangLabel">START HANG (10s)</span>
-                            </button>
-                            <div class="flex items-center justify-between text-[10px] text-neutral-400 px-1 font-bold">
-                                <span id="hangHelperPrompt">5s Prep Chime → 10s Hang → Release Buzzer</span>
-                                <span id="hangPresetProtocolBadge" class="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-emerald-400 font-mono">10s @ Max</span>
-                            </div>
-                            <!-- Hang Duration Custom Quick Chips -->
-                            <div id="hangDurationChipsRow" class="flex items-center justify-center gap-1.5 pt-1.5 border-t border-neutral-900">
-                                <span class="text-[9px] uppercase font-black tracking-wider text-neutral-500">Hang:</span>
-                                <button type="button" onclick="setCustomHangSeconds(5)" id="hangSecChip_5" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">5s</button>
-                                <button type="button" onclick="setCustomHangSeconds(7)" id="hangSecChip_7" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">7s</button>
-                                <button type="button" onclick="setCustomHangSeconds(10)" id="hangSecChip_10" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">10s</button>
-                                <button type="button" onclick="setCustomHangSeconds(15)" id="hangSecChip_15" class="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">15s</button>
-                            </div>
-                        </div>
-
-                        <!-- Interactive Set Checkboxes -->
-                        <div class="my-3">
-                            <p id="workoutSetsPrompt" class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Tap set to log weight & reps:</p>
-                            <div id="workoutSetsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                <!-- Dynamic set buttons injected by renderWorkoutHUD() -->
-                            </div>
-                        </div>
-
-                        <!-- Navigation & Rest Trigger Row -->
-                        <div class="flex items-center justify-between pt-3 border-t border-neutral-800/80">
-                            <button id="workoutRestTriggerBtn" onclick="triggerWorkoutRest()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 active:scale-95 text-xs font-bold border border-neutral-700">
-                                <span>⏱️</span>
-                                <span id="workoutRestBtnLabel">Rest 180s</span>
-                            </button>
-                            <div class="flex gap-2">
-                                <button id="btnPrevExercise" onclick="navWorkoutExercise(-1)" class="px-3 py-2 rounded-xl bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-700 active:scale-95 text-xs font-bold">◀ Prev</button>
-                                <button id="btnNextExercise" onclick="navWorkoutExercise(1)" class="px-3 py-2 rounded-xl bg-emerald-500 text-black hover:bg-emerald-400 border border-emerald-400 active:scale-95 text-xs font-black uppercase tracking-wider">Next ▶</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Quick Preset Switcher Banner in Workout Mode -->
-                    <div id="workoutActiveInfoBanner" class="bg-neutral-900/80 border border-neutral-800 rounded-2xl px-4 py-2.5 flex items-center justify-between shadow-sm shrink-0">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span id="workoutBannerIcon" class="text-base">🏋️</span>
-                            <span id="workoutBannerTitle" class="text-xs font-black text-white truncate">Bench Press</span>
-                        </div>
-                        <div class="flex items-center gap-2 shrink-0">
-                            <select id="workoutPresetDropdown" onchange="selectWorkoutPreset(this.value)" class="bg-neutral-950 border border-neutral-700 text-white rounded-xl px-2.5 py-1 text-[11px] font-bold focus:outline-none focus:border-emerald-500">
-                                <option value="bench_press">🏋️ Bench Press</option>
-                                <option value="antagonist_armor">🛡️ Antagonist Armor</option>
-                                <option value="repeaters_7_3">⚡ 7:3 Repeaters</option>
-                                <option value="max_hangs">🧗 Max Hangs</option>
-                                <option value="climber_core">💪 Climber Core</option>
-                                <option value="mobility_flow">🧘 Mobility Flow</option>
-                            </select>
-                        </div>
-                    </div>
-                </div></section>
-
-            <section id="page-session" class="p-5 flex flex-col w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative">
-                <div class="flex justify-between items-center bg-neutral-900 rounded-[2rem] p-5 border border-neutral-800 shrink-0 mb-4 shadow-sm">
-                    <div class="flex flex-col">
-                        <div class="flex items-center gap-2 mb-1">
-                            <p class="text-neutral-500 text-[10px] font-black uppercase tracking-widest">Session Score</p>
-                            <span id="sessionTimerDisplay" class="text-[9px] font-mono text-neutral-400 bg-black/30 px-2 py-0.5 rounded-md hidden">00:00:00</span>
-                        </div>
-                        <h2 id="sessionScoreDisplay" class="text-4xl font-black text-emerald-400 leading-none">0</h2>
-                    </div>
-                    <div class="flex gap-2">
-                        <!-- Morphing Button -->
-                        <button id="btnSessionAction" onclick="handleSessionAction()" 
-                            class="px-8 py-3 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-base font-black active:scale-95 transition-all shadow-lg active:bg-emerald-500 active:text-black">
-                            START
+                        <button type="button" id="btnSessionAction" onclick="handleSessionAction()" class="w-full mt-1.5 py-1.5 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm">
+                            ▶ START SESSION
                         </button>
                     </div>
                 </div>
-
-                                <!-- Coach Mode Banner (shown in session when coach workout is active) -->
-                <div id="trainingSessionBanner" class="hidden bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0">
-                    <span class="text-xl">🎯</span>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-[10px] font-black uppercase tracking-wider text-emerald-400">Coach Workout Active</p>
-                        <p class="text-xs text-neutral-300 truncate"><span id="trainingBannerPhaseName" class="font-bold text-white">Warmup Pyramid</span> · Target: <span id="trainingBannerGrade" class="text-emerald-400 font-black">6A</span></p>
-                    </div>
-                    <button onclick="switchTab('log')" class="text-[9px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-3 py-1.5 rounded-xl active:scale-95 transition-all">Go Log</button>
-                </div>
-
-                <!-- Today's Coach Guided Workout Launch Card -->
-                <div id="trainingLaunchCard" class="bg-neutral-900 border border-neutral-800 rounded-2xl px-4 py-3 flex items-center gap-3 shrink-0 cursor-pointer active:bg-neutral-800/80 transition-all" onclick="startCoachedSession()">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                        <span class="text-lg">🎯</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p id="sessionCardCoachTitle" class="text-sm font-black text-white truncate">Today's Guided Workout</p>
-                        <p id="sessionCardCoachSubtitle" class="text-[10px] text-neutral-400 truncate">Tap to follow the Coach's daily blueprint</p>
-                    </div>
-                    <button onclick="event.stopPropagation(); startCoachedSession();" class="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-3 py-1.5 rounded-xl active:scale-95 transition-all">START</button>
-                </div>
-                    
 
                 <!-- Live Intra-Session Fatigue & Cutoff Banner -->
-                <div id="liveFatigueAlert" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-2xl p-4 mb-4 text-amber-400 flex items-start gap-3 shadow-lg shrink-0">
-                    <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    <div class="flex-1">
-                        <p class="text-xs font-black uppercase tracking-wider text-amber-300">Cutoff / Fatigue Alert</p>
-                        <p id="liveFatigueText" class="text-[11px] text-neutral-200 leading-snug mt-1"></p>
+                <div id="liveFatigueAlert" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-2xl p-3 mb-3 text-amber-400 flex items-start gap-2.5 shadow-md shrink-0">
+                    <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-wider text-amber-300">Fatigue / Cutoff Alert</p>
+                        <p id="liveFatigueText" class="text-[10px] text-neutral-200 leading-snug mt-0.5"></p>
                     </div>
                 </div>
 
-                <div class="flex-1 overflow-y-auto mb-2 bg-neutral-900 rounded-[2rem] p-4 border border-neutral-800">
-                    <h3 class="text-[10px] font-black text-neutral-500 mb-3 uppercase tracking-widest">Logged Climbs</h3>
-                    <ul id="sessionList" class="space-y-2">
-                        <li class="text-neutral-500 text-center mt-10 text-sm">No climbs logged yet.</li>
+                <!-- CENTER: ACTIVE SESSION PROJECTS & WORKOUTS LIST -->
+                <div class="flex-1 flex flex-col min-h-0 bg-neutral-900/60 rounded-[2rem] p-3 sm:p-4 border border-neutral-800 overflow-hidden mb-3">
+                    <div class="flex items-center justify-between mb-2 px-1 shrink-0">
+                        <h3 class="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Active Routes & Workouts</h3>
+                        <span id="sessionItemsCount" class="text-[9px] font-mono text-neutral-500">0 items</span>
+                    </div>
+                    <ul id="sessionList" class="flex-1 overflow-y-auto overscroll-y-contain space-y-2.5 pr-0.5">
+                        <li class="text-neutral-500 text-center py-12 flex flex-col items-center justify-center gap-2">
+                            <span class="text-3xl">🧗</span>
+                            <span class="text-xs font-bold">No climbs or workouts in this session yet.</span>
+                            <span class="text-[10px] text-neutral-600">Tap + Add Climb / Workout below to log your first route!</span>
+                        </li>
                     </ul>
                 </div>
-            </section>
 
-            <!-- PAGE: PLANNER & AI COACH -->
-            <section id="page-planner" class="p-5 flex flex-col space-y-4 w-full shrink-0 h-[100%] overflow-y-auto snap-center snap-always relative pb-28">
-                <!-- Header -->
-                <div class="flex justify-between items-center shrink-0">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h2 class="text-2xl font-black text-white tracking-tight">AI Coach</h2>
-                            <span class="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/30">v2 Engine</span>
-                        </div>
-                        <p class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mt-0.5">Readiness & Session Blueprint</p>
-                    </div>
-                    <button onclick="renderPlannerUI()" class="p-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white active:scale-95 transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <!-- BOTTOM FIXED ACTION BUTTON -->
+                <div class="sticky bottom-0 pt-2 pb-1 bg-gradient-to-t from-neutral-950 via-neutral-950/90 to-transparent shrink-0 z-10">
+                    <button type="button" id="btnMainAdd" onclick="handleMainAddClick()" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 active:scale-95 transition-all">
+                        <span class="text-base">🧗</span>
+                        <span id="btnMainAddLabel">Start Session / Add Climb</span>
                     </button>
                 </div>
 
-                <!-- Pre-Session Contextual Modifiers (1-tap chips) -->
-                <div class="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-3.5 space-y-2.5 shadow-sm shrink-0">
-                    <div class="flex justify-between items-center">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Quick Check-in</span>
-                        <span class="text-[9px] text-neutral-500">Auto-tunes advice</span>
-                    </div>
-                    <div class="flex gap-2 text-[10px] font-bold">
-                        <span class="text-neutral-500 self-center text-[10px] uppercase font-black mr-1">Fingers:</span>
-                        <button onclick="setPlannerCheckin('fingers', 'fresh')" id="checkin-finger-fresh" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">Fresh</button>
-                        <button onclick="setPlannerCheckin('fingers', 'stiff')" id="checkin-finger-stiff" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">Stiff</button>
-                        <button onclick="setPlannerCheckin('fingers', 'tweaky')" id="checkin-finger-tweaky" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">Tweaky</button>
-                    </div>
-                    <div class="flex gap-2 text-[10px] font-bold">
-                        <span class="text-neutral-500 self-center text-[10px] uppercase font-black mr-1">Time:</span>
-                        <button onclick="setPlannerCheckin('time', 45)" id="checkin-time-45" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">45m</button>
-                        <button onclick="setPlannerCheckin('time', 90)" id="checkin-time-90" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">90m</button>
-                        <button onclick="setPlannerCheckin('time', 120)" id="checkin-time-120" class="flex-1 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-center uppercase tracking-wider transition-all">2h+</button>
-                    </div>
-                </div>
-
-                <!-- Daily Readiness Gauge Card -->
-                <div class="bg-gradient-to-br from-neutral-900 to-neutral-950 border border-neutral-800 rounded-[2rem] p-5 shadow-lg relative overflow-hidden shrink-0">
-                    <div class="flex justify-between items-start mb-3 gap-3">
-                        <div class="flex-1 min-w-0">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Overall Readiness</p>
-                            <h3 id="plannerReadinessTitle" class="text-base font-black text-white mt-1 leading-snug break-words">Calculating...</h3>
-                        </div>
-                        <div class="shrink-0 flex items-center justify-end pl-2">
-                            <span id="plannerReadinessScore" class="text-4xl font-black text-emerald-400 tracking-tight leading-none">--%</span>
-                        </div>
-                    </div>
-                    
-                    <div class="w-full bg-neutral-800 h-2.5 rounded-full overflow-hidden mb-3">
-                        <div id="plannerReadinessGauge" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
-                    </div>
-
-                    <p id="plannerReadinessDesc" class="text-xs text-neutral-400 leading-relaxed"></p>
-                </div>
-
-                <!-- Dual Workload & Tendon Gauges -->
-                <div class="grid grid-cols-2 gap-3 shrink-0">
-                    <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
-                        <div class="flex justify-between items-start mb-1">
-                            <p class="text-[9px] font-black uppercase tracking-wider text-neutral-500">ACWR (Fatigue)</p>
-                            <span id="plannerACWRVal" class="text-base font-black text-white">1.0</span>
-                        </div>
-                        <div class="mt-2">
-                            <span id="plannerACWRBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400">Sweet Spot</span>
-                            <p class="text-[10px] text-neutral-500 mt-1.5 leading-snug">7d acute vs 28d chronic load</p>
-                        </div>
-                    </div>
-
-                    <div class="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
-                        <div class="flex justify-between items-start mb-1">
-                            <p class="text-[9px] font-black uppercase tracking-wider text-neutral-500">Tendon Status</p>
-                            <span id="plannerTendonVal" class="text-base font-black text-white">100%</span>
-                        </div>
-                        <div class="mt-2">
-                            <span id="plannerTendonBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400">100% Ready</span>
-                            <p id="plannerTendonDesc" class="text-[10px] text-neutral-500 mt-1.5 leading-snug">48h collagen remodeling</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Today's Structured Session Blueprint -->
-                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-4 shrink-0">
-                    <div class="flex justify-between items-center">
-                        <h3 class="text-sm font-black text-white uppercase tracking-wider">Session Blueprint</h3>
-                        <button onclick="startCoachedSession()" class="text-[10px] font-bold text-emerald-400 hover:underline">Start in Log &rarr;</button>
-                    </div>
-
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-[10px] font-bold text-neutral-500 uppercase">Focus:</span>
-                        <div id="plannerTargetTags" class="flex items-center gap-1.5 flex-wrap"></div>
-                    </div>
-
-                    <div id="plannerPhasesList" class="space-y-2.5"></div>
-
-                    <div class="p-3 bg-neutral-950 rounded-xl border border-neutral-800">
-                        <div class="flex items-center gap-1.5 mb-1">
-                            <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                            <span class="text-[10px] font-black uppercase tracking-wider text-amber-400">Exit Rule (When to Stop)</span>
-                        </div>
-                        <p id="plannerExitRule" class="text-[11px] text-neutral-400 leading-snug"></p>
-                    </div>
-
-                    <button onclick="startCoachedSession()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
-                        <span>🎯</span>
-                        <span>Start Coach Workout</span>
-                    </button>
-                </div>
-
-                <!-- Off-the-Wall Workout Library -->
-                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-3 shrink-0">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <h3 class="text-sm font-black text-white uppercase tracking-wider">Off-Wall Training Library</h3>
-                            <p class="text-[10px] text-neutral-400 mt-0.5">Antagonist care, 7:3 repeaters, max hangs, core & mobility</p>
-                        </div>
-                        <span class="text-xl">🏋️</span>
-                    </div>
-                    <div id="plannerWorkoutPresetsList" class="space-y-2.5">
-                        <!-- Dynamic workout presets injected by renderPlannerUI() -->
-                    </div>
-                </div>
-
-                <!-- Grade Breakthrough Readiness Card -->
-                <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] p-5 shadow-sm space-y-3 shrink-0">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Grade Breakthrough</p>
-                            <h4 class="text-base font-black text-white mt-0.5">Project Next: <span id="plannerGradeTarget" class="text-emerald-400">--</span></h4>
-                        </div>
-                        <span id="plannerGradeReadinessScore" class="text-2xl font-black text-white">--%</span>
-                    </div>
-
-                    <div class="w-full bg-neutral-800 h-2 rounded-full overflow-hidden">
-                        <div id="plannerGradeBar" class="h-full bg-blue-400 rounded-full transition-all duration-500" style="width: 0%"></div>
-                    </div>
-
-                    <p id="plannerGradeVerdict" class="text-xs text-neutral-300 leading-snug"></p>
-
-                    <div class="pt-2 border-t border-neutral-800 grid grid-cols-2 gap-2 text-[10px] text-neutral-400">
-                        <div>
-                            <span class="font-bold text-neutral-500 block uppercase text-[9px]">Base Pyramid</span>
-                            <span id="plannerGradePyramid">--</span>
-                        </div>
-                        <div>
-                            <span class="font-bold text-neutral-500 block uppercase text-[9px]">Sub-Max Flash</span>
-                            <span id="plannerGradeFlash">--</span>
-                        </div>
-                    </div>
-                </div>
             </section>
 
             <section id="page-history" class="flex flex-col w-full shrink-0 h-[100%] overflow-hidden snap-center snap-always relative">
@@ -1019,45 +681,31 @@
 
         <nav
             class="absolute bottom-0 w-full bg-neutral-950/90 backdrop-blur-md border-t border-neutral-800 p-2 pb-6 sm:pb-4 flex justify-around z-20">
-            <button onclick="switchTab('log')" id="nav-log"
-                class="text-emerald-500 flex flex-col items-center p-2 w-[19%] transition-colors">
-                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
-                </svg>
-                <span class="text-[9px] font-black uppercase tracking-wider">Log</span>
-            </button>
             <button onclick="switchTab('session')" id="nav-session"
-                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors">
+                class="text-emerald-500 flex flex-col items-center p-2 w-[32%] transition-colors">
                 <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
                     </path>
                 </svg>
-                <span class="text-[9px] font-black uppercase tracking-wider">Session</span>
-            </button>
-            <button onclick="switchTab('planner')" id="nav-planner"
-                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors">
-                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span class="text-[9px] font-black uppercase tracking-wider">Coach</span>
+                <span class="text-[10px] font-black uppercase tracking-wider">Session</span>
             </button>
             <button onclick="switchTab('history')" id="nav-history"
-                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors">
+                class="text-neutral-500 flex flex-col items-center p-2 w-[32%] transition-colors">
                 <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
                 </svg>
-                <span class="text-[9px] font-black uppercase tracking-wider">History</span>
+                <span class="text-[10px] font-black uppercase tracking-wider">History</span>
             </button>
             <button onclick="switchTab('leaderboard')" id="nav-leaderboard"
-                class="text-neutral-500 flex flex-col items-center p-2 w-[19%] transition-colors relative">
-                <div class="absolute top-2 right-4 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                class="text-neutral-500 flex flex-col items-center p-2 w-[32%] transition-colors relative">
+                <div class="absolute top-2 right-6 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                 <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
                     </path>
                 </svg>
-                <span class="text-[9px] font-black uppercase tracking-wider">Global</span>
+                <span class="text-[10px] font-black uppercase tracking-wider">Global</span>
             </button>
         </nav>
 
@@ -1119,63 +767,341 @@
     </div>
 
     <!-- TRAINING MODE CONFIG MODAL -->
-    <div id="trainingConfigOverlay" class="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm hidden items-end justify-center" onclick="closeTrainingConfig(event)">
-        <div id="trainingConfigSheet" class="bg-neutral-950 border border-neutral-800 rounded-t-[2.5rem] w-full max-w-md flex flex-col shadow-2xl pointer-events-auto transform translate-y-full transition-transform duration-300 ease-out pb-10">
-            <!-- Handle -->
-            <div class="flex justify-center pt-3 pb-1 shrink-0">
-                <div class="w-10 h-1 bg-neutral-700 rounded-full"></div>
+    <!-- SLIDE-UP MODAL: ADD / EDIT CLIMB & WORKOUT -->
+    <div id="climbLogModal" class="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm hidden flex-col justify-end sm:justify-center p-0 sm:p-4 transition-all" style="touch-action: pan-y;" onclick="if(event.target===this) closeLogModal()">
+        <div class="w-full max-w-md mx-auto bg-neutral-900 border border-neutral-800 rounded-t-[2.5rem] sm:rounded-[2.5rem] p-5 shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto relative animate-modal-up">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-neutral-800 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span id="modalHeaderIcon" class="text-xl">🧗</span>
+                    <h3 id="climbLogModalTitle" class="text-sm font-black text-white uppercase tracking-wider">Add Route</h3>
+                </div>
+                <button type="button" onclick="closeLogModal()" class="text-neutral-500 hover:text-white active:scale-90 text-sm px-2.5 py-1 rounded-xl bg-neutral-800/80">✕</button>
             </div>
-            <!-- Header -->
-            <div class="px-6 pt-2 pb-5 border-b border-neutral-800">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h3 class="text-xl font-black text-white">🏋️ Training Ladder</h3>
-                        <p class="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mt-0.5">Configure your challenge</p>
+
+            <!-- Mode Switcher (Climb vs Workout) -->
+            <div id="modalModeSwitcher" class="flex items-center justify-center p-1 bg-neutral-950 rounded-2xl border border-neutral-800 my-3 shrink-0">
+                <button type="button" id="modalBtnClimb" onclick="switchLogModalMode('climb')" class="flex-1 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-emerald-500 text-black shadow-sm flex items-center justify-center gap-1.5">
+                    <span>🧗</span>
+                    <span>Climb</span>
+                </button>
+                <button type="button" id="modalBtnWorkout" onclick="switchLogModalMode('workout')" class="flex-1 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all text-neutral-400 hover:text-white flex items-center justify-center gap-1.5">
+                    <span>💪</span>
+                    <span>Workout</span>
+                </button>
+            </div>
+
+            <!-- ================= CLIMB MODE CONTAINER ================= -->
+            <div id="modalClimbContainer" class="flex flex-col gap-3.5">
+                <!-- Grade Stepper -->
+                <div class="bg-neutral-950/80 rounded-2xl border border-neutral-800 p-3 flex flex-col items-center">
+                    <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest mb-1">Font Grade</span>
+                    <div class="flex items-center justify-between w-full max-w-[240px]">
+                        <button type="button" onclick="adjModalGrade(-1)" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white active:scale-90 text-2xl font-black transition-all shadow-sm">
+                            <span class="leading-none">&minus;</span>
+                        </button>
+                        <span id="modalDisplayGrade" class="text-4xl font-black text-white tracking-tighter w-28 text-center leading-none">6A</span>
+                        <button type="button" onclick="adjModalGrade(1)" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white active:scale-90 text-2xl font-black transition-all shadow-sm">
+                            <span class="leading-none">+</span>
+                        </button>
                     </div>
-                    <button onclick="closeTrainingConfig()" class="text-neutral-500 hover:text-white bg-neutral-800 p-2 rounded-full active:scale-95 transition-all">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </div>
+
+                <!-- Color Tag Picker (10 Gym Colors) -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between px-1">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest">Hold / Tape Color</span>
+                        <span id="modalSelectedColorName" class="text-[9px] font-black uppercase text-neutral-300">Red</span>
+                    </div>
+                    <div id="modalColorPalette" class="flex items-center justify-between gap-1 p-2 bg-neutral-950/80 rounded-2xl border border-neutral-800 overflow-x-auto no-scrollbar">
+                        <!-- Injected color swatches -->
+                    </div>
+                </div>
+
+                <!-- Style Tags -->
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest px-1">Style Tags</span>
+                    <div id="modalStyleTagsContainer" class="flex flex-wrap gap-1.5">
+                        <!-- Dynamic style tags -->
+                    </div>
+                </div>
+
+                <!-- Attempts Stepper -->
+                <div class="flex items-center justify-between p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800">
+                    <div class="flex flex-col">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest">Attempts / Tries</span>
+                        <span class="text-[10px] text-neutral-400">Burns on this boulder</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="adjModalTries(-1)" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white active:scale-90 text-2xl font-black transition-all shadow-sm">&minus;</button>
+                        <span id="modalDisplayTries" class="w-8 text-center text-xl font-black text-white">1</span>
+                        <button type="button" onclick="adjModalTries(1)" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white active:scale-90 text-2xl font-black transition-all shadow-sm">+</button>
+                    </div>
+                </div>
+
+                <!-- Completion Percentage Milestones -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between px-1">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest">High Point / Completion</span>
+                        <span id="modalCompletionDisplay" class="text-[10px] font-black text-emerald-400">0%</span>
+                    </div>
+                    <div class="grid grid-cols-5 gap-1.5 p-1 bg-neutral-950/80 rounded-2xl border border-neutral-800">
+                        <button type="button" onclick="setModalCompletion(0)" id="compBtn_0" class="py-2 rounded-xl text-[10px] font-black transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">0%</button>
+                        <button type="button" onclick="setModalCompletion(25)" id="compBtn_25" class="py-2 rounded-xl text-[10px] font-black transition-all bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800">25%</button>
+                        <button type="button" onclick="setModalCompletion(50)" id="compBtn_50" class="py-2 rounded-xl text-[10px] font-black transition-all bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800">50%</button>
+                        <button type="button" onclick="setModalCompletion(75)" id="compBtn_75" class="py-2 rounded-xl text-[10px] font-black transition-all bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800">75%</button>
+                        <button type="button" onclick="setModalCompletion(100)" id="compBtn_100" class="py-2 rounded-xl text-[10px] font-black transition-all bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800">100% 🏆</button>
+                    </div>
+                </div>
+
+                <!-- Action Buttons: Add vs Edit -->
+                <div id="modalClimbActionsAdd" class="grid grid-cols-2 gap-2.5 pt-2">
+                    <button type="button" onclick="submitModalClimb(false)" class="py-3.5 px-3 rounded-2xl bg-neutral-800 hover:bg-neutral-750 text-white font-black uppercase tracking-wider text-xs border border-neutral-700 active:scale-95 transition-all">
+                        + Add Project
+                    </button>
+                    <button type="button" onclick="submitModalClimb(true)" class="py-3.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                        ⚡ Quick Send (100%)
+                    </button>
+                </div>
+
+                <div id="modalClimbActionsEdit" class="hidden grid grid-cols-2 gap-2.5 pt-2">
+                    <button type="button" onclick="deleteModalClimb()" class="py-3.5 px-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 text-red-400 font-black uppercase tracking-wider text-xs border border-red-500/30 active:scale-95 transition-all">
+                        🗑️ Delete
+                    </button>
+                    <button type="button" onclick="saveModalClimbEdits()" class="py-3.5 px-3 rounded-2xl bg-emerald-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                        💾 Save Changes
                     </button>
                 </div>
             </div>
-            <!-- Config Body -->
-            <div class="px-6 py-5 space-y-6">
-                <!-- Starting Grade Picker -->
-                <div>
-                    <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Starting Grade</p>
-                    <div class="bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-between px-5 py-4">
-                        <button onclick="adjTrainingStartGrade(-1)" class="w-12 h-12 flex items-center justify-start text-neutral-500 active:text-white transition-colors">
-                            <span class="text-3xl font-black">&minus;</span>
-                        </button>
-                        <div class="text-center">
-                            <span id="trainingConfigGradeDisplay" class="text-4xl font-black text-orange-400">6A</span>
-                            <p class="text-[9px] text-neutral-600 font-bold uppercase tracking-widest mt-1" id="trainingConfigGradeHint">4 below max</p>
-                        </div>
-                        <button onclick="adjTrainingStartGrade(1)" class="w-12 h-12 flex items-center justify-end text-neutral-500 active:text-white transition-colors">
-                            <span class="text-3xl font-black">+</span>
-                        </button>
+
+            <!-- ================= WORKOUT MODE CONTAINER ================= -->
+            <div id="modalWorkoutContainer" class="hidden flex-col gap-3.5">
+                <!-- Preset Chips -->
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest px-1">Exercise Preset</span>
+                    <div id="modalWorkoutPresetChips" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        <!-- Dynamic preset chips -->
                     </div>
                 </div>
-                <!-- Focus Style Selector -->
-                <div>
-                    <p class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Training Focus</p>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="focusBtnBest" onclick="setTrainingFocus('best')" class="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-700 bg-neutral-900 transition-all active:scale-95">
-                            <span class="text-2xl">💪</span>
-                            <span class="text-xs font-black uppercase tracking-wider text-white">Best Style</span>
-                            <div id="bestStyleTags" class="flex flex-wrap gap-1 justify-center"></div>
-                        </button>
-                        <button id="focusBtnAnti" onclick="setTrainingFocus('anti')" class="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-700 bg-neutral-900 transition-all active:scale-95">
-                            <span class="text-2xl">🎯</span>
-                            <span class="text-xs font-black uppercase tracking-wider text-white">Anti-Style</span>
-                            <div id="antiStyleTags" class="flex flex-wrap gap-1 justify-center"></div>
-                        </button>
+
+                <!-- Exercise Header & Info -->
+                <div class="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800">
+                    <div class="flex items-center justify-between">
+                        <h4 id="modalWorkoutExTitle" class="text-sm font-black text-white">Barbell Bench Press</h4>
+                        <span id="modalWorkoutExCategory" class="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">Strength</span>
                     </div>
-                    <p class="text-[9px] text-neutral-500 text-center mt-2 font-bold">Pool of 4 styles rotating progressively every rung to test your adaptability!</p>
+                    <p id="modalWorkoutExDesc" class="text-[11px] text-neutral-400 leading-snug mt-1">Touch chest with control, drive upward with active scapular retraction.</p>
+                </div>
+
+                <!-- Weight & Reps Steppers -->
+                <div id="modalWorkoutWeightRow" class="grid grid-cols-2 gap-2.5">
+                    <div id="modalWorkoutWeightCol" class="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800 flex flex-col items-center">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest mb-1">Weight</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="adjModalWorkoutWeight(-2.5)" class="w-8 h-8 rounded-lg bg-neutral-900 border border-neutral-800 text-white font-bold active:scale-90">-</button>
+                            <span id="modalWorkoutWeightDisplay" class="text-lg font-black text-white w-14 text-center">60 kg</span>
+                            <button type="button" onclick="adjModalWorkoutWeight(2.5)" class="w-8 h-8 rounded-lg bg-neutral-900 border border-neutral-800 text-white font-bold active:scale-90">+</button>
+                        </div>
+                    </div>
+                    <div id="modalWorkoutRepsCol" class="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800 flex flex-col items-center">
+                        <span id="modalWorkoutRepsLabel" class="text-neutral-500 text-[9px] font-black uppercase tracking-widest mb-1">Reps</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="adjModalWorkoutReps(-1)" class="w-8 h-8 rounded-lg bg-neutral-900 border border-neutral-800 text-white font-bold active:scale-90">-</button>
+                            <span id="modalWorkoutRepsDisplay" class="text-lg font-black text-white w-14 text-center">6 reps</span>
+                            <button type="button" onclick="adjModalWorkoutReps(1)" class="w-8 h-8 rounded-lg bg-neutral-900 border border-neutral-800 text-white font-bold active:scale-90">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dedicated Hangboard Protocol & Timer Controller (Repeaters / Max Hangs) -->
+                <div id="modalHangboardController" class="hidden flex-col gap-2.5 p-3.5 bg-gradient-to-r from-emerald-950/70 to-teal-950/70 border border-emerald-500/50 rounded-2xl shadow-lg">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span id="modalHangIcon" class="text-xl shrink-0">⚡</span>
+                            <div class="min-w-0">
+                                <h5 id="modalHangTitle" class="text-xs font-black text-white uppercase tracking-wider truncate">7:3 Repeaters Protocol</h5>
+                                <p id="modalHangSubtitle" class="text-[10px] text-emerald-400 font-bold truncate">6 Reps × (7s Hang / 3s Rest)</p>
+                            </div>
+                        </div>
+                        <span class="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">Audio Beeps 🔔</span>
+                    </div>
+                    <p id="modalHangDesc" class="text-[10px] text-neutral-300 leading-snug">
+                        Full-screen timer with audio chimes for 5s Prep, 7s Hang, 3s Shakeout, and auto 2.5m rest between sets.
+                    </p>
+                    <button type="button" id="modalBtnStartHang" onclick="launchHangTimer()" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-black font-black uppercase tracking-wider text-xs flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/30 active:scale-95 transition-all">
+                        <span class="text-base">▶️</span>
+                        <span id="modalBtnStartHangText">START 7:3 TIMER (SET 1)</span>
+                    </button>
+                </div>
+
+                <!-- Interactive Sets Checklist -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center px-1">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest">Sets Completed</span>
+                        <span id="modalWorkoutSetsHint" class="text-neutral-400 text-[9px] font-bold">Tap set to run timer</span>
+                    </div>
+                    <div id="modalWorkoutSetsGrid" class="grid grid-cols-4 gap-2">
+                        <!-- Dynamic set buttons (Set 1, Set 2, ...) -->
+                    </div>
+                </div>
+
+                <!-- Workout Actions -->
+                <div id="modalWorkoutActionsAdd" class="grid grid-cols-2 gap-2.5 pt-2">
+                    <button type="button" id="modalWorkoutActionLeftBtn" onclick="handleModalWorkoutLeftAction()" class="py-3 px-3 rounded-2xl bg-neutral-800 hover:bg-neutral-750 text-white font-bold text-xs border border-neutral-700 active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                        <span id="modalWorkoutActionLeftIcon">⏱️</span>
+                        <span id="modalWorkoutActionLeftLabel">Set & Rest (90s)</span>
+                    </button>
+                    <button type="button" onclick="saveModalWorkoutToSession()" class="py-3 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                        ✓ Save Workout
+                    </button>
+                </div>
+
+                <div id="modalWorkoutActionsEdit" class="hidden grid grid-cols-2 gap-2.5 pt-2">
+                    <button type="button" onclick="deleteModalWorkout()" class="py-3 px-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 text-red-400 font-black uppercase tracking-wider text-xs border border-red-500/30 active:scale-95 transition-all">
+                        🗑️ Delete
+                    </button>
+                    <button type="button" onclick="saveModalWorkoutToSession()" class="py-3 px-3 rounded-2xl bg-emerald-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                        💾 Save Changes
+                    </button>
                 </div>
             </div>
-            <!-- Launch Button -->
-            <div class="px-6">
-                <button onclick="startTrainingMode()" class="w-full py-4 rounded-2xl bg-orange-500 text-black font-black uppercase tracking-[0.2em] text-lg active:scale-95 transition-all shadow-xl shadow-orange-500/20">🚀 Launch Ladder</button>
+
+        </div>
+    </div>
+
+    <!-- AI COACH RECOMMENDATION DETAIL MODAL -->
+    <div id="coachDetailModal" class="fixed inset-0 z-[160] bg-black/85 backdrop-blur-md hidden items-center justify-center p-4 sm:p-6" onclick="if (event.target === this) closeCoachDetailModal()" style="touch-action: pan-y;">
+        <div class="bg-neutral-900 border border-neutral-800 rounded-[2rem] w-full max-w-sm max-h-[90vh] flex flex-col p-5 shadow-2xl relative overflow-hidden animate-modal-zoom">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-neutral-800/80 shrink-0">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-xl shrink-0">🤖</span>
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-black text-white uppercase tracking-wider">Coach Analysis</h3>
+                        <p id="coachDetailCategory" class="text-[10px] text-emerald-400 font-bold uppercase tracking-wider truncate">Warmup Phase</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeCoachDetailModal()" class="text-neutral-500 hover:text-white p-2 rounded-xl bg-neutral-800/60 active:scale-90 transition-all shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-y-auto py-3.5 space-y-3 pr-0.5">
+                <!-- PRE-SESSION READINESS & FINGER CHECK-IN -->
+                <div class="p-3.5 bg-neutral-950/80 rounded-2xl border border-neutral-800 flex flex-col gap-3 shadow-sm">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5 text-neutral-300">
+                            <span class="text-sm">🖐️</span>
+                            <span class="text-[10px] font-black uppercase tracking-wider">Finger & Body Check-In</span>
+                        </div>
+                        <span id="checkinStatusPill" class="text-[8px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">100% Ready</span>
+                    </div>
+
+                    <!-- 1. Fingers -->
+                    <div class="flex flex-col gap-1">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-neutral-500">How do your finger tendons feel?</span>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button type="button" id="btnCheckinFingerFresh" onclick="setSessionCheckin('fingers', 'fresh')" class="py-2 px-1 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1 border">
+                                <span>⚡</span><span>Fresh</span>
+                            </button>
+                            <button type="button" id="btnCheckinFingerStiff" onclick="setSessionCheckin('fingers', 'stiff')" class="py-2 px-1 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1 border">
+                                <span>🪵</span><span>Stiff</span>
+                            </button>
+                            <button type="button" id="btnCheckinFingerTweaky" onclick="setSessionCheckin('fingers', 'tweaky')" class="py-2 px-1 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1 border">
+                                <span>🩹</span><span>Tweaky</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. Skin -->
+                    <div class="flex flex-col gap-1">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-neutral-500">Fingertip Skin</span>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button type="button" id="btnCheckinSkinGood" onclick="setSessionCheckin('skin', 'good')" class="py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border">
+                                <span>🛡️</span><span>Good</span>
+                            </button>
+                            <button type="button" id="btnCheckinSkinThin" onclick="setSessionCheckin('skin', 'thin')" class="py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border">
+                                <span>💧</span><span>Thin</span>
+                            </button>
+                            <button type="button" id="btnCheckinSkinSplit" onclick="setSessionCheckin('skin', 'split')" class="py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border">
+                                <span>🩸</span><span>Split</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 3. Target Time -->
+                    <div class="flex flex-col gap-1">
+                        <span class="text-[8px] font-black uppercase tracking-widest text-neutral-500">Session Length Goal</span>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <button type="button" id="btnCheckinTime45" onclick="setSessionCheckin('time', 45)" class="py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border">
+                                <span>⏱️</span><span>45m</span>
+                            </button>
+                            <button type="button" id="btnCheckinTime90" onclick="setSessionCheckin('time', 90)" class="py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border">
+                                <span>⏱️</span><span>90m</span>
+                            </button>
+                            <button type="button" id="btnCheckinTime120" onclick="setSessionCheckin('time', 120)" class="py-1.5 px-1 rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1 border">
+                                <span>⏱️</span><span>2h</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Target Grade & Title Hero -->
+                <div class="p-3.5 bg-neutral-950/80 rounded-2xl border border-neutral-800 flex items-center justify-between">
+                    <div>
+                        <span class="text-[9px] font-black uppercase tracking-wider text-neutral-500 block">Target Grade</span>
+                        <div class="flex items-baseline gap-2 mt-0.5">
+                            <span id="coachDetailGrade" class="text-3xl font-black text-emerald-400 leading-none">6A</span>
+                            <span id="coachDetailGradeDelta" class="text-[10px] font-mono font-bold text-neutral-400">(Max - 2)</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span id="coachDetailIcon" class="text-2xl block mb-0.5">🌱</span>
+                        <span id="coachDetailTitle" class="text-xs font-black text-white block">Warmup Flow</span>
+                    </div>
+                </div>
+
+                <!-- Recommended Styles & Grips -->
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-[9px] font-black uppercase tracking-widest text-neutral-500 px-1">Recommended Grip & Movement</span>
+                    <div id="coachDetailTags" class="flex gap-1.5 flex-wrap">
+                        <!-- Dynamic style tags -->
+                    </div>
+                </div>
+
+                <!-- Physiological Rationale -->
+                <div class="p-3 bg-neutral-950/60 rounded-2xl border border-neutral-800/80 flex flex-col gap-1.5">
+                    <div class="flex items-center gap-1.5 text-cyan-400">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span class="text-[10px] font-black uppercase tracking-wider">Physiological Rationale</span>
+                    </div>
+                    <p id="coachDetailRationale" class="text-[11px] text-neutral-300 leading-relaxed"></p>
+                </div>
+
+                <!-- Rest & Volume Guidelines -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="p-2.5 bg-neutral-950/60 rounded-xl border border-neutral-800/80">
+                        <span class="text-[8.5px] font-black uppercase tracking-wider text-neutral-500 block">Rest Between Burns</span>
+                        <span id="coachDetailRest" class="text-xs font-black text-amber-400 mt-0.5 block">1–2 minutes</span>
+                    </div>
+                    <div class="p-2.5 bg-neutral-950/60 rounded-xl border border-neutral-800/80">
+                        <span class="text-[8.5px] font-black uppercase tracking-wider text-neutral-500 block">Volume Focus</span>
+                        <span id="coachDetailVolume" class="text-xs font-black text-white mt-0.5 block">2–4 clean sends</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Action Buttons -->
+            <div class="pt-3 border-t border-neutral-800/80 grid grid-cols-2 gap-2 shrink-0">
+                <button type="button" onclick="cycleCoachRecommendation(); updateCoachDetailModal();" class="py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-750 text-neutral-300 font-bold text-xs border border-neutral-700 active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                    <span>↻</span>
+                    <span>Next Option</span>
+                </button>
+                <button type="button" onclick="applyCoachRecommendation(); closeCoachDetailModal();" class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                    <span>+ Log Route</span>
+                </button>
             </div>
         </div>
     </div>
