@@ -47,11 +47,11 @@
             const btn = document.getElementById('btnSessionAction');
             if (btn) {
                 if (isActive) {
-                    btn.innerHTML = '<span>⏹</span><span>FINISH</span>';
-                    btn.className = 'h-7 px-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[9px] font-black uppercase tracking-wider flex items-center justify-center active:scale-95 transition-all shrink-0';
+                    btn.innerHTML = '<span>⏹</span><span>FINISH SESSION</span>';
+                    btn.className = 'w-full py-1.5 px-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 text-[9.5px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm';
                 } else {
-                    btn.innerHTML = '<span>▶</span><span>START</span>';
-                    btn.className = 'h-7 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider flex items-center justify-center active:scale-95 transition-all shrink-0';
+                    btn.innerHTML = '<span>▶</span><span>START SESSION</span>';
+                    btn.className = 'w-full py-1.5 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[9.5px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm';
                 }
             }
             const mainAddLabel = document.getElementById('btnMainAddLabel');
@@ -3221,6 +3221,8 @@
             const totalCount = (sessionClimbs ? sessionClimbs.length : 0) + (sessionWorkouts ? sessionWorkouts.length : 0);
             if (countEl) countEl.innerText = `${totalCount} item${totalCount === 1 ? '' : 's'}`;
 
+            const editIconSvg = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>`;
+
             let workoutItemsHtml = '';
             if (sessionWorkouts && sessionWorkouts.length > 0) {
                 sessionWorkouts.forEach(w => {
@@ -3231,7 +3233,7 @@
                     const allDone = completedSetsCount >= totalSetsCount && totalSetsCount > 0;
 
                     workoutItemsHtml += `
-                        <li class="flex items-center justify-between gap-2 px-3 py-2.5 bg-neutral-900/90 rounded-2xl border border-neutral-800">
+                        <li class="flex items-center justify-between gap-2 px-3 py-2.5 bg-neutral-900/90 rounded-2xl border border-neutral-800 shadow-sm">
                             <div class="flex items-center gap-2 min-w-0">
                                 <span class="text-base shrink-0">${w.icon || '💪'}</span>
                                 <div class="flex flex-col min-w-0">
@@ -3247,7 +3249,9 @@
                                     </button>
                                 ` : ''}
                                 <span class="text-emerald-400 font-black text-xs">+${completedSetsCount * 10}</span>
-                                <button type="button" onclick="openEditWorkoutModal('${w.id}')" class="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white bg-neutral-800 active:scale-90 text-xs">✏️</button>
+                                <button type="button" onclick="openEditWorkoutModal('${w.id}')" class="p-1.5 rounded-lg text-neutral-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 active:scale-90 transition-all" title="Edit Workout">
+                                    ${editIconSvg}
+                                </button>
                             </div>
                         </li>
                     `;
@@ -3270,71 +3274,89 @@
                 const isSent = c.isTop || c.isFlash || c.statusText === 'Top' || c.statusText === 'Flash';
                 const curPct = isSent ? 100 : (c.completionPct || 0);
                 const tagsInline = (c.tags && c.tags.length > 0)
-                    ? c.tags.map(t => `<span class="bg-neutral-950 text-neutral-400 border border-neutral-800 text-[8px] uppercase px-1.5 py-0.5 rounded font-bold">${t}</span>`).join('')
+                    ? c.tags.map(t => `<span class="bg-neutral-950 text-neutral-400 border border-neutral-800 text-[8px] uppercase px-1.5 py-0.5 rounded font-bold whitespace-nowrap shrink-0">${t}</span>`).join('')
                     : '';
 
-                // SENT CLIMBS: Ultra-clean 1-Row Compact Pill (Saves 65% vertical space!)
+                // SENT CLIMBS: Ultra-clean 1-Row Compact Bar with Undo
                 if (isSent) {
                     const badge = c.isFlash
-                        ? `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">⚡ FLASH</span>`
-                        : `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">✓ TOP · ${c.tries}t</span>`;
+                        ? `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">⚡ FLASH</span>`
+                        : `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">✓ TOP · ${c.tries}t</span>`;
 
                     return `
-                        <li class="px-3 py-2 bg-neutral-900/75 rounded-2xl border border-emerald-500/25 flex items-center justify-between gap-2">
-                            <div class="flex items-center gap-2 min-w-0 flex-wrap">
+                        <li class="px-3 py-2 bg-neutral-900/80 rounded-2xl border border-emerald-500/25 flex items-center justify-between gap-2 shadow-sm">
+                            <div class="flex items-center gap-2 min-w-0 overflow-hidden">
                                 <div class="w-5 h-5 rounded-full shrink-0 border-[3px]" style="border-color: ${hex}; background-color: ${hex}25;"></div>
-                                <span class="text-base font-black text-white leading-none">${c.gradeStr}</span>
+                                <span class="text-base font-black text-white leading-none shrink-0">${c.gradeStr}</span>
                                 ${badge}
-                                ${tagsInline}
+                                ${tagsInline ? `<div class="flex items-center gap-1 overflow-hidden shrink min-w-0">${tagsInline}</div>` : ''}
                             </div>
-                            <div class="flex items-center gap-1.5 shrink-0">
-                                <span class="text-emerald-400 font-black text-xs">+${c.points}</span>
-                                <button type="button" onclick="quickSetCompletion(${c.id}, 75)" title="Undo Send" class="h-7 px-2 rounded-lg bg-neutral-800 text-neutral-400 hover:text-white text-[9px] font-bold active:scale-90">↩</button>
-                                <button type="button" onclick="openEditRouteModal(${c.id})" class="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white bg-neutral-800 active:scale-90 text-xs">✏️</button>
+                            <div class="flex items-center gap-1.5 shrink-0 ml-1">
+                                <span class="text-emerald-400 font-black text-xs leading-none">+${c.points}</span>
+                                <button type="button" onclick="quickSetCompletion(${c.id}, 75)" title="Undo Send" class="h-7 px-2 rounded-lg bg-neutral-800 hover:bg-neutral-750 text-neutral-400 hover:text-white text-[10px] font-black active:scale-90 transition-all">↩</button>
+                                <button type="button" onclick="openEditRouteModal(${c.id})" class="p-1.5 rounded-lg text-neutral-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 active:scale-90 transition-all" title="Edit Route">
+                                    ${editIconSvg}
+                                </button>
                             </div>
                         </li>
                     `;
                 }
 
-                // ACTIVE PROJECTS: Clean 2-Row Card (No Duplicate Labels)
+                // ACTIVE PROJECTS: Clean 2-Row Card (No Duplicate Labels, Never Wraps)
                 return `
-                    <li class="p-2.5 bg-neutral-900/95 rounded-2xl border border-neutral-800 flex flex-col gap-2">
-                        <!-- Row 1: Ring + Grade + Tags + Points (Left) | Tries Stepper + Burn + Edit (Right) -->
-                        <div class="flex items-center justify-between gap-1.5">
-                            <div class="flex items-center gap-2 min-w-0 flex-wrap">
-                                <div class="w-6 h-6 rounded-full shrink-0 border-[3px]" style="border-color: ${hex}; background-color: ${hex}25;"></div>
-                                <span class="text-base font-black text-white leading-none">${c.gradeStr}</span>
-                                ${tagsInline}
-                                <span class="text-emerald-400/90 font-bold text-[11px]">+${c.points}</span>
+                    <li class="p-2.5 bg-neutral-900/95 rounded-2xl border border-neutral-800 flex flex-col gap-2 shadow-sm">
+                        <!-- Row 1: Identity Only (Hold Color Ring + Grade + Style Tags | +Pts + Edit) -->
+                        <div class="flex items-center justify-between gap-2 min-w-0">
+                            <div class="flex items-center gap-2 min-w-0 overflow-hidden">
+                                <div class="w-5 h-5 rounded-full shrink-0 border-[3px]" style="border-color: ${hex}; background-color: ${hex}25;"></div>
+                                <span class="text-base font-black text-white leading-none shrink-0">${c.gradeStr}</span>
+                                ${tagsInline ? `<div class="flex items-center gap-1 overflow-hidden shrink min-w-0">${tagsInline}</div>` : ''}
                             </div>
-
-                            <div class="flex items-center gap-1 shrink-0">
-                                <div class="flex items-center bg-neutral-950 rounded-lg border border-neutral-800">
-                                    <button type="button" onclick="quickAdjustTries(${c.id}, -1)" class="w-6 h-7 text-neutral-400 hover:text-white font-black active:scale-90 text-xs">&minus;</button>
-                                    <span class="text-[11px] font-mono font-black text-white px-1 min-w-[24px] text-center">${c.tries}t</span>
-                                    <button type="button" onclick="quickAdjustTries(${c.id}, 1)" class="w-6 h-7 text-neutral-400 hover:text-white font-black active:scale-90 text-xs">+</button>
-                                </div>
-                                <button type="button" onclick="quickRecordRouteBurn(${c.id})" class="h-7 px-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 font-black text-[9.5px] uppercase tracking-wider flex items-center gap-1 active:scale-95">
-                                    <span>⏱️</span><span>+Burn</span>
+                            <div class="flex items-center gap-2 shrink-0 ml-1">
+                                <span class="text-emerald-400 font-black text-xs leading-none">+${c.points}</span>
+                                <button type="button" onclick="openEditRouteModal(${c.id})" class="p-1.5 rounded-lg text-neutral-400 hover:text-white bg-neutral-800/80 hover:bg-neutral-800 active:scale-90 transition-all" title="Edit Route">
+                                    ${editIconSvg}
                                 </button>
-                                <button type="button" onclick="openEditRouteModal(${c.id})" class="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white bg-neutral-800 active:scale-90 text-xs">✏️</button>
                             </div>
                         </div>
 
-                        <!-- Row 2: Slim 5-Segment High-Point / Top Strip -->
-                        <div class="grid grid-cols-5 gap-1 bg-neutral-950 p-0.5 rounded-xl border border-neutral-800/80">
-                            ${[0, 25, 50, 75, 100].map(pct => {
-                                const isActive = curPct === pct;
-                                const label = pct === 100 ? 'TOP 🏆' : `${pct}%`;
-                                const activeStyle = pct === 100
-                                    ? 'bg-emerald-500 text-black font-black'
-                                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-black';
-                                return `
-                                    <button type="button" onclick="quickSetCompletion(${c.id}, ${pct})" class="h-6 rounded-lg text-[9px] uppercase tracking-wider transition-all active:scale-95 ${isActive ? activeStyle : 'text-neutral-500 hover:text-white font-bold'}">
-                                        ${label}
-                                    </button>
-                                `;
-                            }).join('')}
+                        <!-- Row 2: All Actions in One Sleek Bar (Stepper + Burn on left, 4 Milestones on right) -->
+                        <div class="flex items-center justify-between gap-1.5 pt-1.5 border-t border-neutral-800/60">
+                            <!-- Left: Stepper + Burn -->
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <div class="flex items-center bg-neutral-950 rounded-xl p-0.5 border border-neutral-800">
+                                    <button type="button" onclick="quickAdjustTries(${c.id}, -1)" class="w-6 h-7 text-neutral-400 hover:text-white font-black active:scale-90 text-sm flex items-center justify-center">&minus;</button>
+                                    <span class="text-xs font-mono font-black text-white px-1 min-w-[24px] text-center">${c.tries}t</span>
+                                    <button type="button" onclick="quickAdjustTries(${c.id}, 1)" class="w-6 h-7 text-neutral-400 hover:text-white font-black active:scale-90 text-sm flex items-center justify-center">+</button>
+                                </div>
+                                <button type="button" onclick="quickRecordRouteBurn(${c.id})" class="h-8 px-2 rounded-xl bg-neutral-800 hover:bg-neutral-750 text-neutral-200 border border-neutral-700/80 font-black text-[10px] uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all shadow-sm">
+                                    <span>⏱️</span><span>Burn</span>
+                                </button>
+                            </div>
+
+                            <!-- Right: 4 Milestones (25%, 50%, 75%, TOP 🏆) -->
+                            <div class="flex items-center gap-1 flex-1 justify-end max-w-[205px]">
+                                ${[25, 50, 75, 100].map(pct => {
+                                    const isActive = curPct === pct;
+                                    const isTop = pct === 100;
+                                    const nextPct = isActive ? 0 : pct;
+                                    let styleClasses = '';
+                                    if (isTop && isActive) {
+                                        styleClasses = 'bg-emerald-500 text-black font-black border-emerald-400 shadow-md shadow-emerald-500/20';
+                                    } else if (isActive) {
+                                        styleClasses = 'bg-emerald-500/25 text-emerald-300 font-black border border-emerald-500/50 shadow-sm';
+                                    } else if (isTop) {
+                                        styleClasses = 'bg-neutral-950 text-emerald-400/90 hover:text-emerald-300 border border-neutral-800 font-black';
+                                    } else {
+                                        styleClasses = 'bg-neutral-950 text-neutral-400 hover:text-white border border-neutral-800 font-bold';
+                                    }
+                                    return `
+                                        <button type="button" onclick="quickSetCompletion(${c.id}, ${nextPct})" class="h-8 flex-1 rounded-xl text-[9px] uppercase tracking-wider transition-all flex items-center justify-center active:scale-95 border ${styleClasses}">
+                                            ${isTop ? 'TOP 🏆' : `${pct}%`}
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     </li>
                 `;
