@@ -216,126 +216,100 @@
 
         <main id="mainContainer" class="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory pb-24 relative">
 
-            <section id="page-session" class="p-4 sm:p-5 flex flex-col w-full shrink-0 h-[100%] overflow-hidden snap-center snap-always relative pb-20 sm:pb-24">
-                
-                <!-- TOP ROW: COACH RECOMMENDATION (Left) + SESSION TIMER & SCORE (Right) -->
-                <div class="grid grid-cols-2 gap-3 mb-3 shrink-0">
-                    <!-- Left: Coach Recommendation Widget (Pressable for Analysis) -->
-                    <div id="coachRecommendationCard" class="bg-neutral-900/90 rounded-[1.75rem] p-3 sm:p-3.5 border border-neutral-800 flex flex-col justify-between shadow-sm relative overflow-hidden group">
-                        <div class="flex items-center justify-between gap-1 mb-1">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                                <span id="coachRecIcon" class="text-xs shrink-0">🤖</span>
-                                <span id="coachRecCategory" class="text-[9px] font-black uppercase tracking-wider text-emerald-400 truncate">Coach Suggestion</span>
-                            </div>
-                            <div class="flex items-center gap-1.5 shrink-0">
-                                <button type="button" onclick="cycleCoachRecommendation()" title="Suggest alternative" class="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded-lg bg-neutral-800/80 border border-neutral-700/60 active:scale-90 text-xs transition-transform">↻</button>
-                                <button type="button" onclick="openCoachDetailModal()" title="View coach rationale & science" class="w-7 h-7 flex items-center justify-center text-cyan-400 hover:text-cyan-300 rounded-lg bg-cyan-500/10 border border-cyan-500/30 active:scale-90 text-xs font-black transition-transform">ℹ️</button>
-                            </div>
-                        </div>
+            <section id="page-session" class="px-3.5 pt-3 pb-20 flex flex-col w-full shrink-0 h-full overflow-hidden snap-center snap-always relative">
 
-                        <!-- Pressable Body: Tap to open Coach Analysis Modal -->
-                        <button type="button" onclick="openCoachDetailModal()" class="w-full text-left my-0.5 group-hover:opacity-95 active:scale-[0.98] transition-all flex flex-col gap-1 rounded-xl focus:outline-none">
-                            <div class="flex items-baseline justify-between gap-1">
-                                <div class="flex items-baseline gap-1.5 min-w-0">
-                                    <span id="coachRecGrade" class="text-xl sm:text-2xl font-black text-emerald-400 leading-none">6A</span>
+                <!-- 1. COMPACT SESSION HUD BAR (Single Row, Saves ~90px Vertical Space) -->
+                <div id="sessionTimerWidget" class="bg-neutral-900/95 rounded-2xl px-3 py-2 border border-neutral-800 flex items-center justify-between gap-2 mb-2 shrink-0">
+                    <!-- Left: Live Dot + Timer + Score -->
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div id="sessionStatusBadge" class="flex items-center gap-1 bg-neutral-950 px-1.5 py-0.5 rounded-md border border-neutral-800 shrink-0" title="Session Status">
+                            <span id="sessionStatusDot" class="w-1.5 h-1.5 rounded-full bg-neutral-500"></span>
+                            <span id="sessionStatusText" class="text-[8px] font-black uppercase text-neutral-400">Ready</span>
+                        </div>
+                        <span id="sessionTimerDisplay" class="text-base font-mono font-black text-white tracking-tight leading-none">00:00:00</span>
+                        <span class="text-xs font-black text-emerald-400 leading-none"><span id="sessionScoreDisplay">0</span><span class="text-[8px] text-neutral-500 uppercase ml-0.5">pts</span></span>
+                    </div>
+
+                    <!-- Middle: Inline Micro-Stats -->
+                    <div class="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider bg-neutral-950/80 px-2 py-1 rounded-lg border border-neutral-800/80 shrink-0">
+                        <span class="text-cyan-400"><span id="sessionSendsCount">0</span><span class="text-neutral-500 ml-0.5">S</span></span>
+                        <span class="text-neutral-700">·</span>
+                        <span class="text-neutral-200"><span id="sessionBurnsCount">0</span><span class="text-neutral-500 ml-0.5">B</span></span>
+                        <span class="text-neutral-700">·</span>
+                        <span id="sessionLoadDisplay" class="text-amber-400">0 TL</span>
+                    </div>
+
+                    <!-- Right: Compact Start / Finish Action -->
+                    <button type="button" id="btnSessionAction" onclick="handleSessionAction()" class="h-7 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider flex items-center justify-center active:scale-95 transition-all shrink-0">
+                        ▶ START
+                    </button>
+                </div>
+
+                <!-- 2. FULL-WIDTH COMPACT COACH BANNER (No Truncated Titles) -->
+                <div id="coachRecommendationCard" class="bg-neutral-900/90 rounded-2xl p-2.5 border border-neutral-800 flex flex-col gap-1.5 mb-2 shrink-0 shadow-sm">
+                    <!-- Top Row: Grade + Full Title + Style Tags + Quick Actions -->
+                    <div class="flex items-center justify-between gap-2">
+                        <button type="button" onclick="openCoachDetailModal()" class="flex items-center gap-2 min-w-0 flex-1 text-left active:opacity-80 focus:outline-none">
+                            <span id="coachRecIcon" class="text-sm shrink-0">🤖</span>
+                            <span id="coachRecGrade" class="text-xl font-black text-emerald-400 leading-none shrink-0">6A</span>
+                            <div class="flex flex-col min-w-0">
+                                <div class="flex items-center gap-1.5">
                                     <span id="coachRecTitle" class="text-xs font-black text-white truncate">Warmup Flow</span>
+                                    <span id="coachRecCategory" class="hidden">Coach</span>
                                 </div>
-                                <span class="text-[8px] font-bold text-cyan-400 flex items-center gap-0.5 shrink-0">Analysis ↗</span>
+                                <p id="coachRecAdvice" class="text-[10px] text-neutral-400 truncate leading-tight">Warm up pulleys with easy, precise footwork.</p>
                             </div>
-                            <div id="coachRecTags" class="flex gap-1 flex-wrap">
-                                <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">slab</span>
-                            </div>
-                            <p id="coachRecAdvice" class="text-[10px] text-neutral-400 leading-tight line-clamp-2 mt-0.5">Warm up pulleys with easy, precise footwork.</p>
                         </button>
 
-                        <!-- Quick Finger Readiness Pill & Add Route -->
-                        <div class="flex items-center gap-1.5 mt-1">
-                            <button type="button" onclick="openCoachDetailModal('checkin')" title="Log how fingers and skin feel" class="flex-1 py-1.5 px-2 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-[9px] font-bold text-neutral-300 flex items-center justify-between active:scale-95 transition-all">
-                                <span class="flex items-center gap-1 min-w-0 truncate">
-                                    <span id="coachQuickFingerIcon" class="shrink-0">⚡</span>
-                                    <span id="coachQuickFingerText" class="truncate">Fresh</span>
-                                </span>
-                                <span class="text-[7.5px] text-neutral-500 font-mono shrink-0 ml-1">EDIT ▾</span>
+                        <!-- Right Controls: Readiness Pill + Cycle + Log -->
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button type="button" onclick="openCoachDetailModal('checkin')" title="Check-in Readiness" class="h-7 px-2 rounded-lg bg-neutral-950 border border-neutral-800 text-[9px] font-bold text-neutral-300 flex items-center gap-1 active:scale-95">
+                                <span id="coachQuickFingerIcon">⚡</span>
+                                <span id="coachQuickFingerText" class="max-w-[54px] truncate text-emerald-400">Fresh</span>
                             </button>
-                            <button type="button" onclick="applyCoachRecommendation()" class="py-1.5 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[9.5px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm shrink-0">
-                                <span>+ Log</span>
+                            <button type="button" onclick="cycleCoachRecommendation()" title="Next Option" class="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded-lg bg-neutral-800 border border-neutral-700/60 active:scale-90 text-xs">↻</button>
+                            <button type="button" onclick="applyCoachRecommendation()" class="h-7 px-2.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 text-[9.5px] font-black uppercase tracking-wider active:scale-95">
+                                + Log
                             </button>
                         </div>
                     </div>
 
-                    <!-- Right: Session Timer & Score Widget (Clean, Modern & High-Density) -->
-                    <div id="sessionTimerWidget" class="bg-neutral-900/90 rounded-[1.75rem] p-3 sm:p-3.5 border border-neutral-800 flex flex-col justify-between shadow-sm relative overflow-hidden group">
-                        <div class="flex items-center justify-between gap-1 mb-1">
-                            <div class="flex items-center gap-1.5 min-w-0">
-                                <span class="text-xs shrink-0">⏱️</span>
-                                <span class="text-[9px] font-black uppercase tracking-wider text-neutral-400">Session</span>
-                            </div>
-                            <div id="sessionStatusBadge" class="flex items-center gap-1.5 text-[9px] font-black uppercase text-neutral-400 bg-neutral-950 px-2 py-0.5 rounded-full border border-neutral-800">
-                                <span id="sessionStatusDot" class="w-1.5 h-1.5 rounded-full bg-neutral-500"></span>
-                                <span id="sessionStatusText">Ready</span>
-                            </div>
+                    <!-- Bottom Micro-Row: Tags + Tap for Analysis Hint -->
+                    <div class="flex items-center justify-between px-0.5">
+                        <div id="coachRecTags" class="flex gap-1 flex-wrap">
+                            <span class="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700">slab</span>
                         </div>
-
-                        <!-- Center: Prominent Mono Timer & Micro Stats -->
-                        <div class="flex flex-col gap-1.5 my-0.5">
-                            <div class="flex items-baseline justify-between">
-                                <span id="sessionTimerDisplay" class="text-xl sm:text-2xl font-mono font-black text-white tracking-tight leading-none">00:00:00</span>
-                                <div class="flex items-baseline gap-1">
-                                    <span class="text-[8px] font-black text-neutral-500 uppercase">Pts</span>
-                                    <span id="sessionScoreDisplay" class="text-base sm:text-lg font-black text-emerald-400 leading-none">0</span>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-3 gap-1 bg-neutral-950/70 p-1.5 rounded-xl border border-neutral-800/80 text-center">
-                                <div class="flex flex-col">
-                                    <span id="sessionSendsCount" class="text-[11px] font-black text-cyan-400 leading-none">0</span>
-                                    <span class="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider mt-0.5">Sends</span>
-                                </div>
-                                <div class="flex flex-col border-x border-neutral-800/80">
-                                    <span id="sessionBurnsCount" class="text-[11px] font-black text-neutral-200 leading-none">0</span>
-                                    <span class="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider mt-0.5">Burns</span>
-                                </div>
-                                <div class="flex flex-col">
-                                    <span id="sessionLoadDisplay" class="text-[11px] font-black text-amber-400 leading-none">0 TL</span>
-                                    <span class="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider mt-0.5">Load</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button type="button" id="btnSessionAction" onclick="handleSessionAction()" class="w-full mt-1.5 py-1.5 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 active:scale-95 transition-all shadow-sm">
-                            ▶ START SESSION
+                        <button type="button" onclick="openCoachDetailModal()" class="text-[8.5px] font-bold text-cyan-400/90 hover:text-cyan-300">
+                            Rationale & Check-in ↗
                         </button>
                     </div>
                 </div>
 
-                <!-- Live Intra-Session Fatigue & Cutoff Banner -->
-                <div id="liveFatigueAlert" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-2xl p-3 mb-3 text-amber-400 flex items-start gap-2.5 shadow-md shrink-0">
-                    <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-[10px] font-black uppercase tracking-wider text-amber-300">Fatigue / Cutoff Alert</p>
-                        <p id="liveFatigueText" class="text-[10px] text-neutral-200 leading-snug mt-0.5"></p>
+                <!-- 3. SLIM 1-LINE DISMISSIBLE FATIGUE STRIP (Only When Active) -->
+                <div id="liveFatigueAlert" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-xl px-3 py-1.5 mb-2 text-amber-300 flex items-center justify-between gap-2 shrink-0">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="text-xs shrink-0">⚠️</span>
+                        <p id="liveFatigueText" class="text-[10px] font-bold text-amber-200 truncate"></p>
                     </div>
+                    <button type="button" onclick="this.parentElement.classList.add('hidden')" class="text-amber-400/70 hover:text-white text-xs px-1">✕</button>
                 </div>
 
-                <!-- CENTER: ACTIVE SESSION PROJECTS & WORKOUTS LIST -->
-                <div class="flex-1 flex flex-col min-h-0 bg-neutral-900/60 rounded-[2rem] p-3 sm:p-4 border border-neutral-800 overflow-hidden mb-3">
-                    <div class="flex items-center justify-between mb-2 px-1 shrink-0">
-                        <h3 class="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Active Routes & Workouts</h3>
-                        <span id="sessionItemsCount" class="text-[9px] font-mono text-neutral-500">0 items</span>
+                <!-- 4. BORDERLESS ACTIVE ROUTES LIST (Shows 3-4 Routes at Once) -->
+                <div class="flex-1 flex flex-col min-h-0 overflow-hidden mb-2">
+                    <div class="flex items-center justify-between mb-1.5 px-1 shrink-0">
+                        <h3 class="text-[9.5px] font-black text-neutral-500 uppercase tracking-widest">Active Routes & Workouts</h3>
+                        <span id="sessionItemsCount" class="text-[9.5px] font-mono font-bold text-neutral-500">0 items</span>
                     </div>
-                    <ul id="sessionList" class="flex-1 overflow-y-auto overscroll-y-contain space-y-2.5 pr-0.5">
-                        <li class="text-neutral-500 text-center py-12 flex flex-col items-center justify-center gap-2">
-                            <span class="text-3xl">🧗</span>
-                            <span class="text-xs font-bold">No climbs or workouts in this session yet.</span>
-                            <span class="text-[10px] text-neutral-600">Tap + Add Climb / Workout below to log your first route!</span>
-                        </li>
+                    <ul id="sessionList" class="flex-1 overflow-y-auto space-y-2 pr-0.5 overscroll-y-contain">
+                        <!-- Populated dynamically by renderSessionList() -->
                     </ul>
                 </div>
 
-                <!-- BOTTOM FIXED ACTION BUTTON -->
-                <div class="sticky bottom-0 pt-2 pb-1 bg-gradient-to-t from-neutral-950 via-neutral-950/90 to-transparent shrink-0 z-10">
-                    <button type="button" id="btnMainAdd" onclick="handleMainAddClick()" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 active:scale-95 transition-all">
-                        <span class="text-base">🧗</span>
-                        <span id="btnMainAddLabel">Start Session / Add Climb</span>
+                <!-- 5. COMPACT BOTTOM CTA -->
+                <div class="shrink-0 z-10">
+                    <button type="button" id="btnMainAdd" onclick="handleMainAddClick()" class="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all">
+                        <span class="text-sm">🧗</span>
+                        <span id="btnMainAddLabel">+ Add Climb / Workout</span>
                     </button>
                 </div>
 
