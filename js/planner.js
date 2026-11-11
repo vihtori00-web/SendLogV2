@@ -1286,7 +1286,7 @@ const Planner = (function () {
         // 1. Cooldown Check (Dynamic time or burn cap reached)
         if (elapsedMinutes >= timeLimit || totalTries >= burnLimit) {
             const coolTags = selectStylePair(['slab', 'technical', 'sloper'], true);
-            const targetIdx = Math.max(0, maxGradeIdx - 3);
+            const targetIdx = Math.max(1, Math.round(maxGradeIdx * 0.5));
             return {
                 stage: 'cooldown',
                 category: 'Cool-Down',
@@ -1294,7 +1294,7 @@ const Planner = (function () {
                 targetGradeIdx: targetIdx,
                 targetTags: coolTags,
                 title: 'Cool-Down Flow',
-                advice: `Session cap reached (${elapsedMinutes}m / ${totalTries} burns). Flush forearm metabolites with relaxed open-hand flow.`,
+                advice: `Session cap reached (${elapsedMinutes}m / ${totalTries} burns). Flush forearm metabolites with relaxed open-hand flow at ${GRADES[targetIdx]}.`,
                 icon: '🧘'
             };
         }
@@ -1313,7 +1313,7 @@ const Planner = (function () {
         }
 
         if (recentHighStrainCount >= 3 || (recentHighStrainCount >= 2 && recentHighStrainTries >= 6)) {
-            const targetIdx = Math.max(0, maxGradeIdx - 1);
+            const targetIdx = Math.max(1, maxGradeIdx - 3);
             return {
                 stage: 'strain_pivot',
                 category: 'Pulley Reset',
@@ -1321,7 +1321,7 @@ const Planner = (function () {
                 targetGradeIdx: targetIdx,
                 targetTags: selectStylePair(['sloper', 'pinch', 'technical', 'slab'], true),
                 title: 'Pulley Deload Pivot',
-                advice: `${recentHighStrainTries} high-strain crimp/board burns logged back-to-back. Pivot to open-hand or compression for 1–2 climbs.`,
+                advice: `${recentHighStrainTries} high-strain crimp/board burns logged back-to-back. Pivot to open-hand or compression at ${GRADES[targetIdx]} for 1–2 climbs.`,
                 icon: '🛡️'
             };
         }
@@ -1332,7 +1332,7 @@ const Planner = (function () {
             const lastTries = Math.max(1, parseInt(lastClimb.tries, 10) || 1);
             const lastPct = typeof lastClimb.completionPct === 'number' ? lastClimb.completionPct : 0;
             const lastGradeIdx = GRADES.indexOf(lastClimb.gradeStr) >= 0 ? GRADES.indexOf(lastClimb.gradeStr) : maxGradeIdx;
-            const resetIdx = Math.max(0, maxGradeIdx - 2);
+            const resetIdx = Math.max(1, maxGradeIdx - 5);
 
             // Stalled Low / Burn Cap: 4+ tries at <=25%, 5+ tries at <=50%, or 6+ tries overall
             if ((lastTries >= 4 && lastPct <= 25) || (lastTries >= 5 && lastPct <= 50) || lastTries >= 6) {
@@ -1380,7 +1380,7 @@ const Planner = (function () {
         // Consecutive project fails across problems check:
         const consecutiveProjectFails = climbs.slice(-3).length === 3 && climbs.slice(-3).every(c => !isSend(c) && GRADES.indexOf(c.gradeStr) >= maxGradeIdx - 1);
         if (consecutiveProjectFails) {
-            const targetIdx = Math.max(0, maxGradeIdx - 2);
+            const targetIdx = Math.max(1, maxGradeIdx - 5);
             return {
                 stage: 'rule_of_3',
                 category: 'Power Reset',
@@ -1388,35 +1388,54 @@ const Planner = (function () {
                 targetGradeIdx: targetIdx,
                 targetTags: selectStylePair(['sloper', 'technical', 'slab'], true),
                 title: 'Rule of 3: Neural Reset',
-                advice: '3 consecutive project fails across problems. Take 4m rest and log 1 sub-maximal flow boulder to clear the alert.',
+                advice: `3 consecutive project fails across problems. Take 4m rest and log 1 sub-maximal ${GRADES[targetIdx]} flow boulder to clear the alert.`,
                 icon: '⏱️'
             };
         }
 
-        // 4. Progressive Warm-up Phase (Checks actual grades climbed, not just climbCount < 2)
+        // 4. Progressive Warm-up Phase (Scaled for Font Half-Grades)
         const highestGradeClimbed = climbs.reduce((maxG, c) => Math.max(maxG, GRADES.indexOf(c.gradeStr)), -1);
-        const warmupTargetFloor = Math.max(0, maxGradeIdx - 2);
+        const warmupStep1Idx = Math.max(1, Math.min(maxGradeIdx - 3, Math.round(maxGradeIdx * 0.45)));
+        const warmupStep2Idx = Math.max(2, Math.min(maxGradeIdx - 2, Math.round(maxGradeIdx * 0.68)));
 
-        if (climbCount < 2 || highestGradeClimbed < Math.max(0, maxGradeIdx - 3)) {
-            const stepOffset = climbCount === 0 ? 3 : 2;
-            const targetIdx = Math.max(0, maxGradeIdx - stepOffset);
+        // Warmup Step 1 (Synovial Flow - 0 climbs logged or max grade climbed < maxGradeIdx - 5)
+        if (climbCount === 0 || (climbCount < 2 && highestGradeClimbed < warmupStep1Idx) || highestGradeClimbed < Math.min(maxGradeIdx - 5, warmupStep1Idx)) {
             const warmTags = selectStylePair(['slab', 'technical', 'sloper'], true);
             return {
                 stage: 'warmup',
                 category: 'Warmup',
-                targetGradeStr: GRADES[targetIdx],
-                targetGradeIdx: targetIdx,
+                targetGradeStr: GRADES[warmupStep1Idx],
+                targetGradeIdx: warmupStep1Idx,
                 targetTags: warmTags,
-                title: climbCount === 0 ? 'Warmup: Synovial Flow' : 'Warmup: Progressive Recruitment',
+                title: 'Warmup: Synovial Flow',
                 advice: 'Elevate tendon temperature and hip mobility with deliberate, quiet footwork before pulling hard.',
                 icon: '🌱'
             };
         }
 
-        // 5. Pyramid Ramp (Ensures climber has touched at least maxGradeIdx - 1 or 2 ramp climbs before peak projecting)
-        const hasRampedNearMax = climbs.some(c => GRADES.indexOf(c.gradeStr) >= (maxGradeIdx - 1));
-        if (climbCount < 4 && !hasRampedNearMax) {
-            const targetIdx = Math.max(0, maxGradeIdx - 1);
+        // Warmup Step 2 (Progressive Recruitment - 1 climb logged or max grade climbed < maxGradeIdx - 3)
+        if (climbCount === 1 || (climbCount < 3 && highestGradeClimbed < warmupStep2Idx) || highestGradeClimbed < Math.min(maxGradeIdx - 3, warmupStep2Idx)) {
+            const warmTags = selectStylePair(['slab', 'technical', 'sloper', 'pinch'], true);
+            return {
+                stage: 'warmup',
+                category: 'Warmup',
+                targetGradeStr: GRADES[warmupStep2Idx],
+                targetGradeIdx: warmupStep2Idx,
+                targetTags: warmTags,
+                title: 'Warmup: Progressive Recruitment',
+                advice: 'Increase movement intensity and recruit larger muscle groups while maintaining precise foot placements.',
+                icon: '🌱'
+            };
+        }
+
+        // 5. Pyramid Ramp (Progressive potentiation stepping toward peak project)
+        const rampStep1Idx = Math.max(1, maxGradeIdx - 3); // 7A for 7B+ climber
+        const rampStep2Idx = Math.max(1, maxGradeIdx - 2); // 7A+ for 7B+ climber
+        const hasTouchedRamp1 = climbs.some(c => GRADES.indexOf(c.gradeStr) >= rampStep1Idx);
+        const hasTouchedRamp2 = climbs.some(c => GRADES.indexOf(c.gradeStr) >= rampStep2Idx);
+
+        if (!hasTouchedRamp2 && climbCount < 6) {
+            const targetIdx = hasTouchedRamp1 ? rampStep2Idx : rampStep1Idx;
             const rampTags = selectStylePair(['sloper', 'powerful', 'pinch', 'technical', 'dyno'], false);
             return {
                 stage: 'pyramid',
@@ -1425,7 +1444,7 @@ const Planner = (function () {
                 targetGradeIdx: targetIdx,
                 targetTags: rampTags,
                 title: 'Potentiation Ramp',
-                advice: `Flash or 2nd-go target at ${GRADES[targetIdx]}. Move fast through the crux to prime high-threshold motor units.`,
+                advice: `Flash or 2nd-go target at ${GRADES[targetIdx]}. Move fast through the crux to prime high-threshold motor units before projecting.`,
                 icon: '⚡'
             };
         }
@@ -1433,8 +1452,8 @@ const Planner = (function () {
         // 6. Autoregulated Main Session Phase (Adapts to Readiness, Check-in, Hot Streaks, and Weaknesses)
         // 6A: Recovery / Elevated Fatigue / Tweaky Fingers -> Volume Consolidation & Weakness Targeting
         if (protectPulleys || workload.statusCategory === 'elevated' || adaptation.mode === 'flash_pump') {
-            const offset = (protectPulleys || adaptation.mode === 'flash_pump') ? 2 : 1;
-            const targetIdx = Math.max(0, maxGradeIdx - offset);
+            const offset = (protectPulleys || adaptation.mode === 'flash_pump') ? 3 : 2;
+            const targetIdx = Math.max(1, maxGradeIdx - offset);
             const weakTags = selectStylePair(styleProfile.weakStyles.concat(['sloper', 'technical', 'pinch', 'slab']), true);
             return {
                 stage: 'volume_consolidation',
@@ -1467,7 +1486,7 @@ const Planner = (function () {
         // 6C: Alternate between Peak Project (Strengths) and Sub-Max Weakness Builder every few climbs
         const isWeaknessSlot = ((climbCount + altIndex) % 3 === 1);
         if (isWeaknessSlot) {
-            const targetIdx = Math.max(0, maxGradeIdx - 1);
+            const targetIdx = Math.max(1, maxGradeIdx - 2);
             const weakTags = selectStylePair(styleProfile.weakStyles, true);
             return {
                 stage: 'weakness_target',
