@@ -845,12 +845,28 @@
                     </div>
                 </div>
 
+                <!-- 1-Go Send Type (Flash vs Repeat/Top) - Shown when tries === 1 and completion === 100% -->
+                <div id="modalSendTypeContainer" class="hidden flex-col gap-1.5">
+                    <div class="flex items-center justify-between px-1">
+                        <span class="text-neutral-500 text-[9px] font-black uppercase tracking-widest">1-Go Send Type</span>
+                        <span id="modalSendTypeLabel" class="text-[9px] font-black uppercase text-amber-400">Flash</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 p-1 bg-neutral-950/80 rounded-2xl border border-neutral-800">
+                        <button type="button" onclick="setModalIsFlash(true)" id="modalBtnFlash" class="py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border bg-amber-500/25 border-amber-500/50 text-amber-300 shadow-sm">
+                            <span>⚡</span><span>Flash (1st Ever)</span>
+                        </button>
+                        <button type="button" onclick="setModalIsFlash(false)" id="modalBtnRepeat" class="py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white">
+                            <span>✓</span><span>Top / Repeat (1 Try)</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Action Buttons: Add vs Edit -->
                 <div id="modalClimbActionsAdd" class="grid grid-cols-2 gap-2.5 pt-2">
-                    <button type="button" onclick="submitModalClimb(false)" class="py-3.5 px-3 rounded-2xl bg-neutral-800 hover:bg-neutral-750 text-white font-black uppercase tracking-wider text-xs border border-neutral-700 active:scale-95 transition-all">
+                    <button type="button" id="modalBtnAddSubmit" onclick="submitModalClimb(false)" class="py-3.5 px-3 rounded-2xl bg-neutral-800 hover:bg-neutral-750 text-white font-black uppercase tracking-wider text-xs border border-neutral-700 active:scale-95 transition-all">
                         + Add Project
                     </button>
-                    <button type="button" onclick="submitModalClimb(true)" class="py-3.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                    <button type="button" id="modalBtnQuickSend" onclick="submitModalClimb(true)" class="py-3.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-black uppercase tracking-wider text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
                         ⚡ Quick Send (100%)
                     </button>
                 </div>

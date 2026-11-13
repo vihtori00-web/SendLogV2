@@ -2199,6 +2199,7 @@
         let modalSelectedTags = [];
         let modalTries = 1;
         let modalCompletion = 0;
+        let modalIsFlash = true;
 
         let modalWorkoutPresetId = 'bench_press';
         let modalWorkoutWeight = 60;
@@ -2527,6 +2528,7 @@
             modalSelectedTags = (prefill && prefill.tags) ? [...prefill.tags] : [];
             modalTries = 1;
             modalCompletion = 0;
+            modalIsFlash = true;
 
             modalWorkoutPresetId = 'bench_press';
             modalWorkoutWeight = 60;
@@ -2557,6 +2559,7 @@
             modalSelectedTags = [...(climb.tags || [])];
             modalTries = climb.tries || 1;
             modalCompletion = climb.completionPct !== undefined ? climb.completionPct : (climb.isTop || climb.isFlash ? 100 : 0);
+            modalIsFlash = climb.isFlash !== undefined ? Boolean(climb.isFlash) : (climb.tries === 1 && !climb.isFlashManuallyDisabled);
 
             renderModalUI();
             const modal = document.getElementById('climbLogModal');
@@ -2662,6 +2665,55 @@
                 }
             });
 
+            // Send Type selector for 1-go completions (Flash vs Repeat/Top)
+            const sendTypeCont = document.getElementById('modalSendTypeContainer');
+            const sendTypeLbl = document.getElementById('modalSendTypeLabel');
+            const btnFl = document.getElementById('modalBtnFlash');
+            const btnRep = document.getElementById('modalBtnRepeat');
+
+            const isOneGoSent = (modalCompletion === 100 && modalTries === 1);
+            if (sendTypeCont) {
+                if (isOneGoSent) {
+                    sendTypeCont.classList.remove('hidden');
+                    sendTypeCont.classList.add('flex');
+                    if (sendTypeLbl) {
+                        sendTypeLbl.innerText = modalIsFlash ? 'Flash' : 'Top / Repeat';
+                        sendTypeLbl.className = modalIsFlash ? 'text-[9px] font-black uppercase text-amber-400' : 'text-[9px] font-black uppercase text-blue-400';
+                    }
+                    if (btnFl) {
+                        btnFl.className = modalIsFlash
+                            ? 'py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border bg-amber-500/25 border-amber-500/50 text-amber-300 shadow-sm'
+                            : 'py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white';
+                    }
+                    if (btnRep) {
+                        btnRep.className = !modalIsFlash
+                            ? 'py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border bg-blue-500/25 border-blue-500/50 text-blue-300 shadow-sm'
+                            : 'py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white';
+                    }
+                } else {
+                    sendTypeCont.classList.add('hidden');
+                    sendTypeCont.classList.remove('flex');
+                }
+            }
+
+            // Update action button labels in Add mode
+            const btnAddSubmit = document.getElementById('modalBtnAddSubmit');
+            const btnQuickSend = document.getElementById('modalBtnQuickSend');
+            if (btnAddSubmit) {
+                if (modalCompletion === 100) {
+                    if (modalTries === 1) {
+                        btnAddSubmit.innerText = modalIsFlash ? '+ Log Flash' : '+ Log Top (1t)';
+                    } else {
+                        btnAddSubmit.innerText = `+ Log Send (${modalTries}t)`;
+                    }
+                } else {
+                    btnAddSubmit.innerText = '+ Add Project';
+                }
+            }
+            if (btnQuickSend) {
+                btnQuickSend.innerText = modalIsFlash ? '⚡ Quick Flash (100%)' : '✓ Quick Top (100%)';
+            }
+
             const addActions = document.getElementById('modalClimbActionsAdd');
             const editActions = document.getElementById('modalClimbActionsEdit');
             if (modalAction === 'edit') {
@@ -2733,10 +2785,23 @@
 
         function adjModalTries(delta) {
             modalTries = Math.max(1, modalTries + delta);
+            if (modalTries > 1) {
+                modalIsFlash = false;
+            } else if (modalTries === 1 && modalAction === 'add') {
+                modalIsFlash = true;
+            }
             const tEl = document.getElementById('modalDisplayTries');
             if (tEl) tEl.innerText = modalTries;
+            renderModalClimbFields();
             if ('vibrate' in navigator) navigator.vibrate(10);
         }
+
+        function setModalIsFlash(val) {
+            modalIsFlash = Boolean(val);
+            renderModalClimbFields();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+        }
+        window.setModalIsFlash = setModalIsFlash;
 
         function setModalCompletion(pct) {
             modalCompletion = pct;
@@ -2752,7 +2817,7 @@
             const finalTries = isQuickSend ? 1 : modalTries;
             const finalCompletion = isQuickSend ? 100 : modalCompletion;
             const isSent = finalCompletion === 100;
-            const isFl = isSent && (finalTries === 1);
+            const isFl = isSent && (finalTries === 1) && modalIsFlash;
             const isTp = isSent && !isFl;
 
             const delta = modalGradeIndex - maxGradeIndex;
@@ -2774,6 +2839,7 @@
                 prevCompletionPct: finalCompletion,
                 isTop: isTp,
                 isFlash: isFl,
+                isFlashManuallyDisabled: (finalTries === 1 && !isFl),
                 points: pts,
                 time: timeStr,
                 timestamp: Date.now(),
@@ -2810,7 +2876,7 @@
             if (!climb) return;
 
             const isSent = modalCompletion === 100;
-            const isFl = isSent && (modalTries === 1);
+            const isFl = isSent && (modalTries === 1) && modalIsFlash;
             const isTp = isSent && !isFl;
             const delta = modalGradeIndex - maxGradeIndex;
             const pts = calculatePoints(delta, isFl, isTp, modalTries, modalCompletion);
@@ -2825,6 +2891,7 @@
             climb.completionPct = modalCompletion;
             climb.isTop = isTp;
             climb.isFlash = isFl;
+            climb.isFlashManuallyDisabled = (modalTries === 1 && !isFl);
             climb.statusText = isFl ? 'Flash' : isTp ? 'Top' : 'Project';
             climb.color = isFl ? 'text-amber-400' : isTp ? 'text-blue-400' : 'text-neutral-400';
             climb.points = pts;
@@ -3203,7 +3270,7 @@
             touchClimb(climb);
 
             const isSent = pct === 100;
-            const isFl = isSent && (climb.tries === 1);
+            const isFl = isSent && (climb.tries === 1) && !climb.isFlashManuallyDisabled;
             const isTp = isSent && !isFl;
 
             climb.completionPct = pct;
@@ -3235,6 +3302,28 @@
             updateCoachRecommendation();
             if ('vibrate' in navigator) navigator.vibrate(25);
         }
+
+        function toggleClimbFlash(routeId) {
+            const climb = (sessionClimbs || []).find(c => c.id === routeId);
+            if (!climb || climb.tries !== 1) return;
+
+            if ('vibrate' in navigator) navigator.vibrate(15);
+            climb.isFlash = !climb.isFlash;
+            climb.isTop = !climb.isFlash;
+            climb.isFlashManuallyDisabled = !climb.isFlash;
+            climb.statusText = climb.isFlash ? 'Flash' : 'Top';
+            climb.color = climb.isFlash ? 'text-amber-400' : 'text-blue-400';
+
+            const gIdx = fontGrades.indexOf(climb.gradeStr);
+            const deltaGrade = (gIdx >= 0 ? gIdx : maxGradeIndex) - maxGradeIndex;
+            climb.points = calculatePoints(deltaGrade, climb.isFlash, climb.isTop, 1, 100);
+
+            touchClimb(climb);
+            renderSessionList();
+            saveActiveSession();
+            updateCoachRecommendation();
+        }
+        window.toggleClimbFlash = toggleClimbFlash;
 
         // ============================================================================
         // RENDER & MANAGE SESSION CLIMBS & WORKOUTS
@@ -3309,9 +3398,14 @@
 
                 // SENT CLIMBS: Ultra-clean 1-Row Compact Bar with Undo
                 if (isSent) {
-                    const badge = c.isFlash
-                        ? `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">⚡ FLASH</span>`
-                        : `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">✓ TOP · ${c.tries}t</span>`;
+                    let badge = '';
+                    if (c.isFlash) {
+                        badge = `<button type="button" onclick="toggleClimbFlash(${c.id})" title="Tap to switch between Flash and Repeat/Top" class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 hover:bg-amber-500/35 active:scale-95 transition-all flex items-center gap-0.5">⚡ FLASH</button>`;
+                    } else if (c.tries === 1) {
+                        badge = `<button type="button" onclick="toggleClimbFlash(${c.id})" title="Tap to switch between Top and Flash" class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0 hover:bg-blue-500/35 active:scale-95 transition-all flex items-center gap-0.5">✓ TOP · 1t</button>`;
+                    } else {
+                        badge = `<span class="text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">✓ TOP · ${c.tries}t</span>`;
+                    }
                     const restorePct = (typeof c.prevCompletionPct === 'number' && c.prevCompletionPct < 100) ? c.prevCompletionPct : 75;
 
                     return `
@@ -3450,6 +3544,8 @@
         window.quickAdjustTries = quickAdjustTries;
         window.quickRecordRouteBurn = quickRecordRouteBurn;
         window.quickSetCompletion = quickSetCompletion;
+        window.toggleClimbFlash = toggleClimbFlash;
+        window.setModalIsFlash = setModalIsFlash;
         window.removeClimb = removeClimb;
         window.cycleCoachRecommendation = cycleCoachRecommendation;
         window.applyCoachRecommendation = applyCoachRecommendation;
