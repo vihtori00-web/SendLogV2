@@ -1,35 +1,7 @@
         const APP_VERSION = 'v2.2.0';
 
-        // =============================================
-        // EARLY OAUTH REDIRECT INTERCEPTOR
-        // Must run BEFORE anything else to catch tokens
-        // from Google OAuth redirects immediately.
-        // =============================================
-        (function earlyOAuthIntercept() {
-            try {
-                const fullUrl = window.location.href || document.URL || '';
-                const hashPart = (window.location.hash || '').replace(/^#\/?\??/, '');
-                const searchPart = (window.location.search || '').substring(1);
-                const combined = hashPart + '&' + searchPart;
-                const params = new URLSearchParams(combined);
-                const token = params.get('access_token');
-                const expiresIn = params.get('expires_in');
-
-                if (token) {
-                    // Save token immediately to localStorage before anything can go wrong
-                    localStorage.setItem('gdrive_access_token', token);
-                    localStorage.setItem('gdrive_token_expires_at', String(Date.now() + (parseInt(expiresIn || '3600') * 1000)));
-                    localStorage.setItem('gdrive_connected', 'true');
-                    localStorage.setItem('gdrive_early_token', 'true');
-                    localStorage.removeItem('gdrive_auth_pending');
-                    // Clean URL immediately
-                    window.history.replaceState(null, null, window.location.pathname);
-                    console.log('[SendLog] Early OAuth intercept: token captured and saved.');
-                }
-            } catch (e) {
-                console.error('[SendLog] Early OAuth intercept failed:', e);
-            }
-        })();
+        // Clean up legacy Google Drive auth keys
+        ['gdrive_access_token', 'gdrive_token_expires_at', 'gdrive_connected', 'gdrive_user_email', 'gdrive_auto_backup', 'gdrive_auth_pending', 'gdrive_early_token'].forEach(k => localStorage.removeItem(k));
 
         const DOM = {
             sessionTimerStr: document.getElementById('sessionTimerDisplay'),
@@ -3669,7 +3641,6 @@
             renderHistoryList();
             if (typeof renderPlannerUI === 'function') renderPlannerUI();
             switchTab('history');
-            if (typeof triggerMilestoneBackup === 'function') triggerMilestoneBackup();
         }
 
         function switchTab(tabId, push = true) {

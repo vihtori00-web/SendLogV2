@@ -1074,7 +1074,6 @@
                 localStorage.setItem('boulderHistory', JSON.stringify(boulderHistory));
                 updateAnalytics();
                 renderHistoryList();
-                if (typeof triggerMilestoneBackup === 'function') triggerMilestoneBackup();
             }
         }
 
@@ -1195,7 +1194,6 @@
             // 4. Update UI
             updateAnalytics();
             renderHistoryList();
-            if (typeof triggerMilestoneBackup === 'function') triggerMilestoneBackup();
 
             // 5. Go back to return from #edit-session state to #session-idx state.
             // The popstate listener will automatically trigger openSessionDetail with the updated data
@@ -1853,12 +1851,6 @@
         }
 
         async function forceHardRefresh() {
-            try {
-                if (typeof GDrive !== 'undefined' && GDrive.showLoadingOverlay) {
-                    GDrive.showLoadingOverlay("Force Refreshing App...");
-                }
-            } catch (e) {}
-
             // Unregister all service workers
             if ('serviceWorker' in navigator) {
                 try {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sendlog-v2-31';
+const CACHE_NAME = 'sendlog-v2-32';
 const ASSETS = [
   './',
   'index.html',
@@ -7,7 +7,6 @@ const ASSETS = [
   'fix_tool.html',
   'js/app.js',
   'js/chart.js',
-  'js/gdrive.js',
   'js/planner.js',
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/chart.js',
@@ -43,14 +42,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip caching for external API calls, Google Identity, and Dreamlo/CORS proxies
+  // Skip caching for external API calls and Dreamlo/CORS proxies
   if (
     url.hostname.includes('dreamlo.com') ||
     url.hostname.includes('sirjosh.workers.dev') ||
     url.hostname.includes('cors.sh') ||
-    url.hostname.includes('codetabs.com') ||
-    url.hostname.includes('accounts.google.com') ||
-    url.hostname.includes('googleapis.com')
+    url.hostname.includes('codetabs.com')
   ) {
     return;
   }
