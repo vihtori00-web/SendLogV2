@@ -18,6 +18,20 @@
         let activeTrendSecondary = 'none';
         let isTrendSmoothed = false;
 
+        function getGradeColor(gradeStr) {
+            if (!gradeStr || gradeStr === '🍺') return '#64748b';
+            const gIdx = fontGrades.indexOf(gradeStr);
+            if (gIdx === -1) return '#64748b';
+            if (gIdx < 7) return '#64748b';      // < 6B: Slate
+            if (gIdx <= 8) return '#10b981';     // 6B - 6B+: Emerald
+            if (gIdx <= 10) return '#06b6d4';    // 6C - 6C+: Cyan
+            if (gIdx <= 12) return '#3b82f6';    // 7A - 7A+: Blue
+            if (gIdx <= 14) return '#a855f7';    // 7B - 7B+: Purple
+            if (gIdx <= 16) return '#f59e0b';    // 7C - 7C+: Amber
+            return '#ef4444';                    // >= 8A: Red
+        }
+        window.getGradeColor = getGradeColor;
+
         function computeMovingAverage(data, windowSize = 3) {
             const result = [];
             for (let i = 0; i < data.length; i++) {
@@ -39,6 +53,18 @@
 
         function getMetricConfig(metric, filteredHistory) {
             const configs = {
+                load: {
+                    labelText: '🔥 Load (TL)',
+                    color: '#f59e0b',
+                    bgColor: 'rgba(245, 158, 11, 0.08)',
+                    yAxisID: 'y',
+                    data: filteredHistory.map(s => {
+                        if (typeof Planner !== 'undefined' && typeof Planner.calculateSessionLoad === 'function') {
+                            return Math.round(Planner.calculateSessionLoad(s, maxGradeIndex));
+                        }
+                        return 0;
+                    })
+                },
                 max_grade: {
                     labelText: 'Max Grade',
                     color: '#38bdf8',
@@ -150,7 +176,7 @@
         window.toggleTrendSmoothing = toggleTrendSmoothing;
 
         function updateMetricChipsUI() {
-            const metrics = ['max_grade', 'avg_grade', 'flash_pct', 'score', 'sends', 'projects', 'duration'];
+            const metrics = ['load', 'max_grade', 'avg_grade', 'flash_pct', 'score', 'sends', 'projects', 'duration'];
             metrics.forEach(m => {
                 const chip = document.getElementById('chipMetric_' + m);
                 if (chip) {
@@ -184,7 +210,7 @@
             const sText = document.getElementById('secondarySelText');
             if (sBtn && sText) {
                 const names = {
-                    max_grade: 'Max Grade', score: 'Score', sends: 'Sends', avg_grade: 'Avg Grade',
+                    load: '🔥 Load (TL)', max_grade: 'Max Grade', score: 'Score', sends: 'Sends', avg_grade: 'Avg Grade',
                     flash_pct: 'Flash %', projects: 'Proj Tries', duration: 'Duration',
                     none: 'None'
                 };
@@ -203,6 +229,7 @@
                     sBtn.classList.add('border-neutral-800', 'text-neutral-500');
                 } else {
                     const classes = {
+                        load: ['border-amber-500/40', 'text-amber-400'],
                         max_grade: ['border-blue-500/40', 'text-blue-400'],
                         score: ['border-emerald-500/40', 'text-emerald-400/80'],
                         sends: ['border-cyan-500/40', 'text-cyan-400/80'],
@@ -356,6 +383,9 @@
             // Calendar Heatmap
             if (typeof renderCalendarHeatmap === 'function') renderCalendarHeatmap();
 
+            // Strength Progression
+            if (typeof renderStrengthProgression === 'function') renderStrengthProgression();
+
             // Period comparison deltas
             if (typeof updateComparisonDeltas === 'function') updateComparisonDeltas();
 
@@ -370,7 +400,16 @@
             if (!ctx) return;
             
             if (currentChartType === 'line') {
-                const labels = filteredHistory.map(() => '');
+                const summaryStrip = document.getElementById('radarStyleSummary');
+                if (summaryStrip) summaryStrip.classList.add('hidden');
+
+                const labels = filteredHistory.map(s => {
+                    const d = s.timestamp ? new Date(s.timestamp) : (s.date ? new Date(s.date) : null);
+                    if (!d || isNaN(d.getTime())) return '';
+                    const day = d.getDate();
+                    const mo = d.toLocaleDateString(undefined, { month: 'short' });
+                    return `${day} ${mo}`;
+                });
                 
                 const primaryConfig = getMetricConfig(activeTrendMetric, filteredHistory);
                 const secondaryConfig = activeTrendSecondary !== 'none' ? getMetricConfig(activeTrendSecondary, filteredHistory) : null;
@@ -469,7 +508,9 @@
                                             const val = item.raw;
                                             if (val === null || val === undefined) return '';
                                             if (item.datasetIndex === 0) {
-                                                if (activeTrendMetric === 'max_grade' || activeTrendMetric === 'avg_grade') {
+                                                if (activeTrendMetric === 'load') {
+                                                    lines.push(`${primaryConfig.labelText}: ${val} TL`);
+                                                } else if (activeTrendMetric === 'max_grade' || activeTrendMetric === 'avg_grade') {
                                                     lines.push(`${primaryConfig.labelText}: ${fontGrades[Math.round(val)] || val}`);
                                                 } else if (activeTrendMetric === 'flash_pct') {
                                                     lines.push(`${primaryConfig.labelText}: ${val}%`);
@@ -479,7 +520,9 @@
                                                     lines.push(`${primaryConfig.labelText}: ${val}`);
                                                 }
                                             } else if (secondaryConfig) {
-                                                if (activeTrendSecondary === 'max_grade' || activeTrendSecondary === 'avg_grade') {
+                                                if (activeTrendSecondary === 'load') {
+                                                    lines.push(`${secondaryConfig.labelText}: ${val} TL`);
+                                                } else if (activeTrendSecondary === 'max_grade' || activeTrendSecondary === 'avg_grade') {
                                                     lines.push(`${secondaryConfig.labelText}: ${fontGrades[Math.round(val)] || val}`);
                                                 } else if (activeTrendSecondary === 'flash_pct') {
                                                     lines.push(`${secondaryConfig.labelText}: ${val}%`);
@@ -505,6 +548,7 @@
                                     ticks: { 
                                         font: { size: 9 },
                                         callback: function (val) {
+                                            if (activeTrendMetric === 'load') return val + ' TL';
                                             if (activeTrendMetric === 'avg_grade' || activeTrendMetric === 'max_grade') {
                                                 return fontGrades[Math.round(val)] || '';
                                             }
@@ -524,6 +568,7 @@
                                     ticks: { 
                                         font: { size: 9 }, 
                                         callback: function (val) {
+                                            if (activeTrendSecondary === 'load') return val + ' TL';
                                             if (activeTrendSecondary === 'avg_grade' || activeTrendSecondary === 'max_grade') {
                                                 return fontGrades[Math.round(val)] || '';
                                             }
@@ -534,50 +579,87 @@
                                         } 
                                     } 
                                 },
-                                x: { grid: { display: false }, border: { display: false }, ticks: { display: false } }
+                                x: { 
+                                    display: true,
+                                    grid: { display: false }, 
+                                    border: { display: false }, 
+                                    ticks: { display: true, maxTicksLimit: 6, font: { size: 8 }, color: '#737373' } 
+                                }
                             }
                         }
                     });
                 }
             } else if (currentChartType === 'radar') {
-                const tagCounts = { 'crimp': 0, 'sloper': 0, 'pinch': 0, 'slab': 0, 'dyno': 0, 'board': 0, 'technical': 0, 'powerful': 0 };
-                let totalClimbs = 0;
+                const styles = ['crimp', 'sloper', 'pinch', 'slab', 'dyno', 'board', 'technical', 'powerful'];
+                const tagCounts = {};
+                const tagSends = {};
+                styles.forEach(s => { tagCounts[s] = 0; tagSends[s] = 0; });
+
                 filteredHistory.forEach(s => {
                     (s.climbs || []).forEach(c => {
-                        totalClimbs++;
-                        if (c.tags) c.tags.forEach(t => { if (tagCounts[t] !== undefined) tagCounts[t]++; });
+                        const sent = c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash;
+                        (c.tags || []).forEach(t => {
+                            if (tagCounts[t] !== undefined) {
+                                tagCounts[t]++;
+                                if (sent) tagSends[t]++;
+                            }
+                        });
                     });
                 });
+
                 const maxTagCount = Math.max(...Object.values(tagCounts), 1);
-                const tagPct = Object.values(tagCounts).map(v => Math.round((v / maxTagCount) * 100));
-                
+                const volumeSharePct = styles.map(s => Math.round((tagCounts[s] / maxTagCount) * 100));
+                const sendEfficiencyPct = styles.map(s => tagCounts[s] > 0 ? Math.round((tagSends[s] / tagCounts[s]) * 100) : 0);
+
+                const radarDatasets = [
+                    {
+                        label: 'Volume Share %',
+                        data: volumeSharePct,
+                        backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                        borderColor: '#06b6d4',
+                        pointBackgroundColor: '#06b6d4',
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        borderWidth: 1.5
+                    },
+                    {
+                        label: 'Send Efficiency %',
+                        data: sendEfficiencyPct,
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        borderColor: '#10b981',
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        borderWidth: 1.5
+                    }
+                ];
+
                 if (chart) {
-                    chart.data.labels = Object.keys(tagCounts).map(k => k.toUpperCase());
-                    chart.data.datasets[0].data = tagPct;
+                    chart.data.labels = styles.map(k => k.toUpperCase());
+                    chart.data.datasets = radarDatasets;
                     chart.update('none');
                 } else {
                     chart = new Chart(ctx, {
                         type: 'radar',
                         data: {
-                            labels: Object.keys(tagCounts).map(k => k.toUpperCase()),
-                            datasets: [{
-                                label: 'Style %',
-                                data: tagPct,
-                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                                borderColor: '#10b981',
-                                pointBackgroundColor: '#10b981',
-                                pointRadius: 4,
-                                pointHoverRadius: 6,
-                                borderWidth: 1.5
-                            }]
+                            labels: styles.map(k => k.toUpperCase()),
+                            datasets: radarDatasets
                         },
                         options: {
-                            responsive: true, maintainAspectRatio: false,
+                            responsive: true,
+                            maintainAspectRatio: false,
                             plugins: {
-                                legend: { display: false },
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: { color: '#a3a3a3', font: { size: 9 }, boxWidth: 8, boxHeight: 8 }
+                                },
                                 tooltip: {
                                     enabled: true,
-                                    callbacks: { label: ctx => ctx.parsed.r + '%' }
+                                    backgroundColor: 'rgba(23, 23, 23, 0.95)',
+                                    borderColor: '#404040',
+                                    borderWidth: 1,
+                                    callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.r}%` }
                                 }
                             },
                             scales: {
@@ -593,40 +675,150 @@
                         }
                     });
                 }
+
+                // Render 2-column summary strip below chart
+                const summaryStrip = document.getElementById('radarStyleSummary');
+                const strongEl = document.getElementById('radarStrongStyles');
+                const weakEl = document.getElementById('radarWeakStyles');
+                if (summaryStrip) {
+                    summaryStrip.classList.remove('hidden');
+                    if (typeof Planner !== 'undefined' && typeof Planner.computeStyleProfile === 'function') {
+                        const profile = Planner.computeStyleProfile(filteredHistory, maxGradeIndex);
+                        const top2 = (profile.strongStyles || []).slice(0, 2);
+                        const bottom2 = (profile.weakStyles || []).slice(0, 2);
+
+                        if (strongEl) {
+                            strongEl.innerHTML = top2.map(tag => {
+                                const st = profile.stats[tag] || { climbs: 0, sends: 0 };
+                                const pct = st.climbs > 0 ? Math.round((st.sends / st.climbs) * 100) : 0;
+                                return `<div class="flex items-center justify-between"><span class="capitalize text-neutral-300">${tag}</span><span class="text-emerald-400">${pct}% send (${st.sends}/${st.climbs})</span></div>`;
+                            }).join('') || '--';
+                        }
+
+                        if (weakEl) {
+                            weakEl.innerHTML = bottom2.map(tag => {
+                                const st = profile.stats[tag] || { climbs: 0, sends: 0 };
+                                const pct = st.climbs > 0 ? Math.round((st.sends / st.climbs) * 100) : 0;
+                                return `<div class="flex items-center justify-between"><span class="capitalize text-neutral-300">${tag}</span><span class="text-amber-400">${pct}% send (${st.sends}/${st.climbs})</span></div>`;
+                            }).join('') || '--';
+                        }
+                    }
+                }
             } else if (currentChartType === 'bar') {
-                const gradeCounts = {};
+                const summaryStrip = document.getElementById('radarStyleSummary');
+                if (summaryStrip) summaryStrip.classList.add('hidden');
+
+                const gradeStats = {};
                 filteredHistory.forEach(s => {
                     (s.climbs || []).forEach(c => {
-                        if ((c.statusText === 'Top' || c.statusText === 'Flash') && c.gradeStr && c.gradeStr !== '🍺') {
-                            gradeCounts[c.gradeStr] = (gradeCounts[c.gradeStr] || 0) + 1;
+                        const g = c.gradeStr;
+                        if (!g || g === '🍺') return;
+                        if (!gradeStats[g]) {
+                            gradeStats[g] = { flashes: 0, tops: 0, projects: 0, totalClimbs: 0, totalTries: 0 };
+                        }
+                        const st = gradeStats[g];
+                        st.totalClimbs++;
+                        const tries = Math.max(1, parseInt(c.tries, 10) || 1);
+                        st.totalTries += tries;
+
+                        if (c.statusText === 'Flash' || c.isFlash) {
+                            st.flashes++;
+                        } else if (c.statusText === 'Top' || c.isTop) {
+                            st.tops++;
+                        } else {
+                            st.projects++;
                         }
                     });
                 });
-                const sortedKeys = Object.keys(gradeCounts).sort((a,b) => fontGrades.indexOf(a) - fontGrades.indexOf(b));
-                const dataValues = sortedKeys.map(k => gradeCounts[k]);
-                
+
+                const sortedKeys = Object.keys(gradeStats).sort((a, b) => fontGrades.indexOf(a) - fontGrades.indexOf(b));
+                const flashData = sortedKeys.map(k => gradeStats[k].flashes);
+                const topData = sortedKeys.map(k => gradeStats[k].tops);
+                const projectData = sortedKeys.map(k => gradeStats[k].projects);
+
+                const barDatasets = [
+                    {
+                        label: 'Flash',
+                        data: flashData,
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 3
+                    },
+                    {
+                        label: 'Top (Redpoint)',
+                        data: topData,
+                        backgroundColor: '#10b981',
+                        borderRadius: 3
+                    },
+                    {
+                        label: 'Project (Unsent)',
+                        data: projectData,
+                        backgroundColor: '#262626',
+                        borderColor: '#525252',
+                        borderWidth: 1,
+                        borderRadius: 3
+                    }
+                ];
+
                 if (chart) {
                     chart.data.labels = sortedKeys;
-                    chart.data.datasets[0].data = dataValues;
+                    chart.data.datasets = barDatasets;
+                    chart.options.scales.x.stacked = true;
+                    chart.options.scales.y.stacked = true;
                     chart.update('none');
                 } else {
                     chart = new Chart(ctx, {
                         type: 'bar',
                         data: {
                             labels: sortedKeys,
-                            datasets: [{
-                                label: 'Tops',
-                                data: dataValues,
-                                backgroundColor: '#3b82f6',
-                                borderRadius: 4
-                            }]
+                            datasets: barDatasets
                         },
                         options: {
-                            responsive: true, maintainAspectRatio: false,
-                            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: { color: '#a3a3a3', font: { size: 9 }, boxWidth: 8, boxHeight: 8 }
+                                },
+                                tooltip: {
+                                    enabled: true,
+                                    backgroundColor: 'rgba(23, 23, 23, 0.95)',
+                                    borderColor: '#404040',
+                                    borderWidth: 1,
+                                    titleColor: '#ffffff',
+                                    bodyColor: '#d4d4d4',
+                                    callbacks: {
+                                        afterBody: function(items) {
+                                            if (!items || items.length === 0) return '';
+                                            const idx = items[0].dataIndex;
+                                            const g = sortedKeys[idx];
+                                            const st = gradeStats[g];
+                                            if (!st) return '';
+                                            const totalSends = st.flashes + st.tops;
+                                            const sendRate = st.totalClimbs > 0 ? Math.round((totalSends / st.totalClimbs) * 100) : 0;
+                                            const avgAttempts = st.totalClimbs > 0 ? (st.totalTries / st.totalClimbs).toFixed(1) : '1.0';
+                                            return [
+                                                `Total Climbs: ${st.totalClimbs}`,
+                                                `Send Rate: ${sendRate}% (${totalSends}/${st.totalClimbs})`,
+                                                `Avg Attempts: ${avgAttempts} tries`
+                                            ];
+                                        }
+                                    }
+                                }
+                            },
                             scales: {
-                                y: { beginAtZero: true, grid: { color: '#1a1a1a' }, border: { display: false }, ticks: { font: { size: 9 } } },
-                                x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 9 }, color: '#737373' } }
+                                x: {
+                                    stacked: true,
+                                    grid: { display: false },
+                                    ticks: { font: { size: 9 }, color: '#737373' }
+                                },
+                                y: {
+                                    stacked: true,
+                                    beginAtZero: true,
+                                    grid: { color: '#1a1a1a' },
+                                    ticks: { font: { size: 9 }, color: '#737373', precision: 0 }
+                                }
                             }
                         }
                     });
@@ -637,7 +829,8 @@
 
         // -- HISTORY SEGMENTED NAVIGATION & FILTERING --
         let historySubTab = localStorage.getItem('sendlog_history_subtab') || 'sessions';
-        let historyTypeFilter = 'all'; // 'all' | 'climbs' | 'workouts'
+        let historyTypeFilter = 'all'; // 'all' | 'climbs' | 'workouts' | 'projects'
+        let historyStyleFilter = 'all';
 
         function switchHistorySubTab(tab) {
             historySubTab = tab;
@@ -673,6 +866,7 @@
                 }
                 updateAnalytics();
                 if (typeof renderCalendarHeatmap === 'function') renderCalendarHeatmap();
+                if (typeof renderStrengthProgression === 'function') renderStrengthProgression();
                 if (chart) {
                     requestAnimationFrame(() => {
                         chart.resize();
@@ -685,18 +879,34 @@
             historyTypeFilter = (type || 'all').toLowerCase();
             if ('vibrate' in navigator) navigator.vibrate(10);
 
-            ['all', 'climbs', 'workouts'].forEach(t => {
-                const btn1 = document.getElementById(`hfType${t.charAt(0).toUpperCase() + t.slice(1)}`);
-                const btn2 = document.getElementById(`filterBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
-                [btn1, btn2].forEach(btn => {
-                    if (btn) {
-                        if (t === historyTypeFilter) {
-                            btn.className = "px-3 py-1 rounded-lg text-xs font-black uppercase transition-all bg-emerald-500 text-black shadow-sm";
-                        } else {
-                            btn.className = "px-3 py-1 rounded-lg text-xs font-black uppercase transition-all text-neutral-400 hover:text-white";
-                        }
+            ['all', 'climbs', 'workouts', 'projects'].forEach(t => {
+                const btn = document.getElementById(`hfType${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                if (btn) {
+                    if (t === historyTypeFilter) {
+                        btn.className = "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm";
+                    } else {
+                        btn.className = "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white";
                     }
-                });
+                }
+            });
+
+            renderHistoryList();
+        }
+
+        function filterHistoryStyle(style) {
+            historyStyleFilter = (style || 'all').toLowerCase();
+            if ('vibrate' in navigator) navigator.vibrate(10);
+
+            const allStyles = ['all', 'crimp', 'sloper', 'pinch', 'slab', 'dyno', 'board', 'technical', 'powerful'];
+            allStyles.forEach(s => {
+                const btn = document.getElementById(`hfStyle_${s}`);
+                if (btn) {
+                    if (s === historyStyleFilter) {
+                        btn.className = "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm";
+                    } else {
+                        btn.className = "px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white";
+                    }
+                }
             });
 
             renderHistoryList();
@@ -704,15 +914,16 @@
 
         window.switchHistorySubTab = switchHistorySubTab;
         window.filterHistoryType = filterHistoryType;
+        window.filterHistoryStyle = filterHistoryStyle;
 
         function renderHistoryList() {
             const listEl = document.getElementById('historyList');
             if (!listEl) return;
             let filteredHistory = [...boulderHistory];
 
-            // Filter by Period
+            // 1. Filter by Period (Fix date mutation bug by calling getStartOfWeek() and unmutated now)
             const now = new Date();
-            const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).setHours(0, 0, 0, 0);
+            const startOfWeek = getStartOfWeek();
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
             if (historyViewMode === 'WEEK') {
@@ -721,31 +932,44 @@
                 filteredHistory = filteredHistory.filter(s => (s.timestamp || 0) >= startOfMonth);
             }
 
-            // Compute period summary numbers
+            // 2. Filter by Type
+            if (historyTypeFilter === 'climbs') {
+                filteredHistory = filteredHistory.filter(s => (s.climbs || []).length > 0);
+            } else if (historyTypeFilter === 'workouts') {
+                filteredHistory = filteredHistory.filter(s => (s.workouts || []).length > 0);
+            } else if (historyTypeFilter === 'projects') {
+                filteredHistory = filteredHistory.filter(s => (s.climbs || []).some(c => c.statusText === 'Project' || (!c.isTop && !c.isFlash)));
+            }
+
+            // 3. Filter by Style Tag
+            if (historyStyleFilter && historyStyleFilter !== 'all') {
+                filteredHistory = filteredHistory.filter(s => (s.climbs || []).some(c => (c.tags || []).includes(historyStyleFilter)));
+            }
+
+            // Compute KPI Ribbon stats for the filtered sessions
             let periodSends = 0;
             let periodFlashes = 0;
-            let periodAllClimbs = 0;
             let periodDuration = 0;
             let bestGradeIdx = -1;
-            let periodWorkouts = 0;
 
             filteredHistory.forEach(s => {
                 periodDuration += (s.duration || 0);
                 (s.climbs || []).forEach(c => {
-                    periodAllClimbs++;
-                    if (c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash) {
+                    const sent = c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash;
+                    if (sent) {
                         periodSends++;
                         if (c.statusText === 'Flash' || c.isFlash) periodFlashes++;
                         const gIdx = fontGrades.indexOf(c.gradeStr);
                         if (gIdx > bestGradeIdx) bestGradeIdx = gIdx;
                     }
                 });
-                periodWorkouts += (s.workouts || []).length;
             });
 
-            const flashPct = periodAllClimbs > 0 ? Math.round((periodFlashes / periodAllClimbs) * 100) : 0;
-            const bestGradeStr = bestGradeIdx >= 0 ? fontGrades[bestGradeIdx] : '-';
-            const durStr = formatDuration(periodDuration) || '0m';
+            const flashPct = periodSends > 0 ? Math.round((periodFlashes / periodSends) * 100) : 0;
+            const bestGradeStr = bestGradeIdx >= 0 ? fontGrades[bestGradeIdx] : '--';
+            const durHours = Math.floor(periodDuration / 3600);
+            const durMins = Math.floor((periodDuration % 3600) / 60);
+            const durStr = durHours > 0 ? `${durHours}h ${durMins}m` : `${durMins}m`;
 
             const heroFlash = document.getElementById('heroStatFlash');
             const heroSends = document.getElementById('heroStatSends');
@@ -759,26 +983,8 @@
             if (heroTime) heroTime.innerText = durStr;
             if (heroSessions) heroSessions.innerText = `${filteredHistory.length}`;
 
-            const heroSummary = document.getElementById('historyPeriodSummary');
-            const heroTitle = document.getElementById('historyHeroTitle');
-            const heroSubtitle = document.getElementById('historyHeroSubtitle');
-
-            if (heroSummary) heroSummary.innerText = `${filteredHistory.length} session${filteredHistory.length !== 1 ? 's' : ''} completed`;
-            if (heroTitle) {
-                const parts = [`${filteredHistory.length} Sessions`, `${periodSends} Sends`];
-                if (periodWorkouts > 0) parts.push(`${periodWorkouts} Workouts`);
-                heroTitle.innerText = parts.join(' · ');
-            }
-            if (heroSubtitle) {
-                heroSubtitle.innerText = `Max Send: ${bestGradeStr} · Total Active: ${durStr}`;
-            }
-
-            // Apply type filter
-            if (historyTypeFilter === 'climbs') {
-                filteredHistory = filteredHistory.filter(s => (s.climbs || []).length > 0);
-            } else if (historyTypeFilter === 'workouts') {
-                filteredHistory = filteredHistory.filter(s => (s.workouts || []).length > 0);
-            }
+            // Wire live period-over-period comparison deltas
+            if (typeof updateComparisonDeltas === 'function') updateComparisonDeltas();
 
             if (filteredHistory.length === 0) {
                 listEl.innerHTML = `
@@ -790,23 +996,56 @@
                 return;
             }
 
-            listEl.innerHTML = filteredHistory.slice().reverse().map((s) => {
+            const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+            const sortedSessions = filteredHistory.slice().reverse();
+
+            // Calculate month totals
+            const monthTotals = {};
+            sortedSessions.forEach(s => {
+                const sDate = s.timestamp ? new Date(s.timestamp) : (s.date ? new Date(s.date) : new Date());
+                const mKey = `${monthNames[sDate.getMonth()]} ${sDate.getFullYear()}`;
+                if (!monthTotals[mKey]) monthTotals[mKey] = { count: 0, points: 0 };
+                monthTotals[mKey].count++;
+                monthTotals[mKey].points += (s.score || 0);
+            });
+
+            let currentMonthKey = '';
+            let html = '';
+
+            sortedSessions.forEach((s) => {
                 const actualIndex = boulderHistory.indexOf(s);
                 const { sends, flashes, avgGrade } = getSessionStats(s);
 
-                // Robust Date Logic using timestamp
-                const sDate = s.timestamp ? new Date(s.timestamp) : new Date();
+                // Date Parsing from s.timestamp (fallback to s.date)
+                let sDate;
+                if (s.timestamp && typeof s.timestamp === 'number' && !isNaN(s.timestamp)) {
+                    sDate = new Date(s.timestamp);
+                } else if (s.date) {
+                    sDate = new Date(s.date);
+                    if (isNaN(sDate.getTime())) sDate = new Date();
+                } else {
+                    sDate = new Date();
+                }
+
+                const mKey = `${monthNames[sDate.getMonth()]} ${sDate.getFullYear()}`;
+                if (mKey !== currentMonthKey) {
+                    currentMonthKey = mKey;
+                    const mInfo = monthTotals[mKey];
+                    html += `
+                    <li class="sticky top-0 z-10 bg-neutral-950/90 backdrop-blur-md py-1.5 px-3 rounded-xl border border-neutral-800/80 my-1 flex items-center justify-between list-none">
+                        <span class="text-[9.5px] font-black uppercase tracking-widest text-neutral-400">${mKey}</span>
+                        <span class="text-[8.5px] font-black text-neutral-500 uppercase tracking-wider">${mInfo.count} SESSIONS · ${mInfo.points.toLocaleString()} PTS</span>
+                    </li>
+                    `;
+                }
+
                 const checkToday = new Date();
                 const checkYesterday = new Date(); checkYesterday.setDate(checkYesterday.getDate() - 1);
-                
                 const isToday = sDate.toDateString() === checkToday.toDateString();
                 const isYesterday = sDate.toDateString() === checkYesterday.toDateString();
-                
-                let relLabel = "";
-                if (isToday) relLabel = "TODAY";
-                else if (isYesterday) relLabel = "YEST";
-                else relLabel = sDate.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
-
+                const topLabel = isToday ? 'TODAY' : isYesterday ? 'YEST' : dayNames[sDate.getDay()];
                 const dayNum = sDate.getDate();
 
                 const climbCount = s.climbs ? s.climbs.length : 0;
@@ -815,60 +1054,103 @@
                 const isWorkoutOnly = climbCount === 0 && workoutCount > 0;
                 const isHybrid = climbCount > 0 && workoutCount > 0;
 
-                const primaryGrade = sends > 0 ? avgGrade : (climbCount > 0 ? (s.climbs[0].gradeStr || '-') : (workoutCount > 0 ? (workoutList[0].shortName || workoutList[0].name) : '-'));
+                // Max send vs highest attempt
+                let maxSendGradeIdx = -1;
+                let maxAttemptGradeIdx = -1;
+                let boardCount = 0;
+                let hasLimitAttempt = false;
 
-                let peakLadder = 0;
-                if (s.climbs) {
-                    s.climbs.forEach(c => {
-                        const m = (c.tags || []).find(t => t.startsWith('ladder-'));
-                        if (m) {
-                            const r = parseInt(m.split('-')[1]);
-                            if (r > peakLadder) peakLadder = r;
-                        }
-                    });
+                (s.climbs || []).forEach(c => {
+                    const gIdx = fontGrades.indexOf(c.gradeStr);
+                    const sent = c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash;
+                    if (gIdx >= 0) {
+                        if (gIdx > maxAttemptGradeIdx) maxAttemptGradeIdx = gIdx;
+                        if (sent && gIdx > maxSendGradeIdx) maxSendGradeIdx = gIdx;
+                        if (gIdx >= maxGradeIndex) hasLimitAttempt = true;
+                    }
+                    if ((c.tags || []).includes('board')) boardCount++;
+                });
+
+                const maxSendGrade = maxSendGradeIdx >= 0 ? fontGrades[maxSendGradeIdx] : null;
+                const highestAttemptedGrade = maxAttemptGradeIdx >= 0 ? fontGrades[maxAttemptGradeIdx] : '-';
+
+                let headerTitleHtml = '';
+                if (sends > 0) {
+                    headerTitleHtml = `Peak <span class="text-emerald-400 font-black">${maxSendGrade}</span> <span class="text-[10px] font-normal text-neutral-500 ml-1">Avg ${avgGrade}</span>`;
+                } else if (climbCount > 0) {
+                    headerTitleHtml = `Projecting <span class="text-amber-400 font-black">${highestAttemptedGrade}</span>`;
+                } else if (workoutCount > 0) {
+                    headerTitleHtml = `<span class="text-cyan-400 font-black">${workoutList[0].shortName || workoutList[0].name || 'Workout'}</span>`;
+                } else {
+                    headerTitleHtml = `<span class="text-neutral-400">Session</span>`;
                 }
-                const peakLadderBadge = peakLadder > 0 
-                    ? `<span class="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">🪜 Rung ${peakLadder}</span>` 
-                    : '';
 
-                const workoutBadges = workoutList.map(w => `
-                    <span class="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">${w.icon || '💪'} ${w.badge || w.category || 'Workout'}</span>
-                `).join(' ');
+                // Archetype badges
+                let archetypeBadgeHtml = '';
+                if (climbCount > 0) {
+                    if (boardCount / climbCount >= 0.4) {
+                        archetypeBadgeHtml += `<span class="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase tracking-wider">🪜 Board</span>`;
+                    }
+                    if (hasLimitAttempt) {
+                        archetypeBadgeHtml += `<span class="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider">🔥 Limit</span>`;
+                    }
+                    if (sends >= 8) {
+                        archetypeBadgeHtml += `<span class="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">⚡ Volume</span>`;
+                    }
+                }
 
-                const gradeColors = ['#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444'];
+                // Training Load
+                const sessionLoad = (typeof Planner !== 'undefined' && typeof Planner.calculateSessionLoad === 'function')
+                    ? Math.round(Planner.calculateSessionLoad(s, maxGradeIndex))
+                    : 0;
+
+                // Semantic Grade-Tier Mini Bar
                 let miniBarHtml = '';
                 if (climbCount > 0) {
-                    const gradeSegments = {};
+                    const sentClimbs = [];
+                    const projectClimbs = [];
                     s.climbs.forEach(c => {
-                        if (c.gradeStr && c.gradeStr !== '🍺') {
-                            gradeSegments[c.gradeStr] = (gradeSegments[c.gradeStr] || 0) + 1;
-                        }
+                        const sent = c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash;
+                        if (sent) sentClimbs.push(c);
+                        else projectClimbs.push(c);
                     });
-                    const sortedGrades = Object.keys(gradeSegments).sort((a,b) => fontGrades.indexOf(a) - fontGrades.indexOf(b));
-                    miniBarHtml = sortedGrades.map((g, i) => {
-                        const pct = Math.round((gradeSegments[g] / climbCount) * 100);
-                        const col = gradeColors[i % gradeColors.length];
-                        return `<div style="width: ${pct}%; background-color: ${col};" class="h-full" title="${g}: ${gradeSegments[g]}"></div>`;
+
+                    sentClimbs.sort((a, b) => fontGrades.indexOf(a.gradeStr) - fontGrades.indexOf(b.gradeStr));
+                    projectClimbs.sort((a, b) => fontGrades.indexOf(a.gradeStr) - fontGrades.indexOf(b.gradeStr));
+
+                    const orderedClimbs = [...sentClimbs, ...projectClimbs];
+                    const climbPct = 100 / climbCount;
+
+                    miniBarHtml = orderedClimbs.map(c => {
+                        const sent = c.statusText === 'Top' || c.statusText === 'Flash' || c.isTop || c.isFlash;
+                        const col = getGradeColor(c.gradeStr);
+                        const opacityStyle = sent ? 'opacity: 1;' : 'opacity: 0.35;';
+                        return `<div style="width: ${climbPct}%; background-color: ${col}; ${opacityStyle}" class="h-full" title="${c.gradeStr || ''}: ${c.statusText || 'Attempt'}"></div>`;
                     }).join('');
                 }
 
-                return `
+                const workoutBadges = workoutList.map(w => `
+                    <span class="text-[8.5px] font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">${w.icon || '💪'} ${w.badge || w.category || 'Workout'}</span>
+                `).join(' ');
+
+                html += `
                 <li onclick="openSessionDetail(${actualIndex})" 
-                    class="bg-neutral-900 border ${isWorkoutOnly ? 'border-cyan-500/25' : isHybrid ? 'border-emerald-500/25' : 'border-neutral-800'} rounded-[2rem] p-4 flex flex-col justify-between active:scale-[0.98] transition cursor-pointer shadow-sm hover:border-neutral-700">
+                    class="bg-neutral-900 border ${isWorkoutOnly ? 'border-cyan-500/25' : isHybrid ? 'border-emerald-500/25' : 'border-neutral-800'} rounded-[2rem] p-4 flex flex-col justify-between active:scale-[0.98] transition cursor-pointer shadow-sm hover:border-neutral-700 list-none">
                     <div class="flex items-center justify-between">
                         <!-- Date & Key Info -->
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
                             <div class="flex flex-col items-center justify-center w-11 h-11 bg-neutral-950 rounded-2xl border border-neutral-800 shrink-0">
-                                <span class="text-[9px] font-black ${isToday ? 'text-emerald-400' : isYesterday ? 'text-amber-400' : 'text-neutral-500'} tracking-wider">${relLabel}</span>
+                                <span class="text-[8.5px] font-black ${isToday ? 'text-emerald-400' : isYesterday ? 'text-amber-400' : 'text-neutral-500'} tracking-wider">${topLabel}</span>
                                 <span class="text-sm font-black text-white leading-none mt-0.5">${dayNum}</span>
                             </div>
-                            <div>
+                            <div class="min-w-0">
                                 <div class="flex items-center gap-1.5 flex-wrap">
-                                    <h4 class="text-sm font-black text-white truncate">${primaryGrade}</h4>
-                                    ${isWorkoutOnly ? '<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 uppercase">Workout</span>' : ''}
-                                    ${isHybrid ? '<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">Hybrid</span>' : ''}
+                                    <h4 class="text-sm font-black text-white truncate">${headerTitleHtml}</h4>
+                                    ${archetypeBadgeHtml}
+                                    ${isWorkoutOnly ? '<span class="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 uppercase">Workout</span>' : ''}
+                                    ${isHybrid ? '<span class="text-[8.5px] font-black px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">Hybrid</span>' : ''}
                                 </div>
-                                <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <div class="flex items-center gap-2 mt-1 flex-wrap">
                                     ${climbCount > 0 ? `
                                         <span class="text-[10px] font-bold text-neutral-400">${climbCount} Climb${climbCount > 1 ? 's' : ''}</span>
                                         ${sends > 0 ? `<span class="text-neutral-700 text-[8px]">●</span><span class="text-[10px] font-bold text-emerald-400">✓ ${sends}</span>` : ''}
@@ -876,29 +1158,31 @@
                                     ` : `
                                         <span class="text-[10px] font-bold text-cyan-400">💪 ${workoutCount} Workout${workoutCount > 1 ? 's' : ''} Completed</span>
                                     `}
-                                    ${peakLadderBadge ? ` <span class="text-neutral-700 text-[8px]">●</span> ${peakLadderBadge}` : ''}
                                     ${workoutBadges}
                                 </div>
                             </div>
                         </div>
-                        <!-- Score & Duration -->
+                        <!-- Score, Training Load & Duration -->
                         <div class="text-right shrink-0 ml-2">
                             <div class="text-base font-black text-white leading-none">${(s.score || 0).toLocaleString()}<span class="text-[8px] text-neutral-500 ml-1 uppercase">pts</span></div>
-                            <div class="text-[10px] font-bold text-neutral-400 italic mt-1">${formatDuration(s.duration) || '--'}</div>
+                            <div class="flex items-center justify-end gap-1.5 mt-1">
+                                <span class="text-[10px] font-bold text-amber-400/90">${sessionLoad} TL</span>
+                                <span class="text-neutral-700 text-[8px]">·</span>
+                                <span class="text-[10px] font-bold text-neutral-400 italic">${formatDuration(s.duration) || '--'}</span>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="flex items-center gap-3 mt-4">
-                        <div class="flex-1 h-1.5 bg-neutral-950 rounded-full overflow-hidden flex shadow-inner border border-neutral-800/40">
+                    <div class="mt-3.5">
+                        <div class="h-1.5 bg-neutral-950 rounded-full overflow-hidden flex shadow-inner border border-neutral-800/40">
                             ${miniBarHtml || (workoutCount > 0 ? '<div class="w-full h-full bg-cyan-500/40"></div>' : '<div class="w-full h-full bg-neutral-950 opacity-20"></div>')}
                         </div>
-                        <button onclick="event.stopPropagation(); deleteSession(${actualIndex})" class="p-1 text-neutral-500/40 hover:text-red-500 active:scale-90 transition-all">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                        </button>
                     </div>
                 </li>
                 `;
-            }).join('');
+            });
+
+            listEl.innerHTML = html;
         }
 
         // -- SESSION DETAIL MODAL --
@@ -989,21 +1273,20 @@
             });
             const gradeKeys = Object.keys(gradeCounts).sort((a, b) => fontGrades.indexOf(a) - fontGrades.indexOf(b));
             const total = gradeKeys.reduce((s, k) => s + gradeCounts[k], 0);
-            const barColors = ['#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#ec4899', '#ef4444', '#06b6d4', '#84cc16'];
 
             const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
 
             if (gradeKeys.length > 0) {
-                const barHtml = gradeKeys.map((g, i) => {
+                const barHtml = gradeKeys.map((g) => {
                     const pct = (gradeCounts[g] / Math.max(1, total)) * 100;
-                    const col = barColors[i % barColors.length];
-                    return `<div style="width:${pct}%;background:${col};opacity:0.85" title="${g}: ${gradeCounts[g]}"></div>`;
+                    const col = getGradeColor(g);
+                    return `<div style="width:${pct}%;background:${col};opacity:0.9" title="${g}: ${gradeCounts[g]}"></div>`;
                 }).join('');
                 setHtml('sdGradeBar', barHtml);
 
-                const labelsHtml = gradeKeys.map((g, i) => {
+                const labelsHtml = gradeKeys.map((g) => {
                     const pct = (gradeCounts[g] / Math.max(1, total)) * 100;
-                    const col = barColors[i % barColors.length];
+                    const col = getGradeColor(g);
                     return `<div style="width:${pct}%;overflow:hidden;color:${col}" class="text-[8px] font-black truncate">
                         <span style="color:${col}">${g}×${gradeCounts[g]}</span>
                     </div>`;
@@ -1076,6 +1359,34 @@
                 renderHistoryList();
             }
         }
+        window.deleteSession = deleteSession;
+
+        function deleteSessionFromDetail() {
+            if (currentSessionDetailIndex === null || currentSessionDetailIndex < 0 || currentSessionDetailIndex >= boulderHistory.length) return;
+            if (confirm("Are you sure you want to delete this session? This cannot be undone.")) {
+                boulderHistory.splice(currentSessionDetailIndex, 1);
+                localStorage.setItem('boulderHistory', JSON.stringify(boulderHistory));
+                closeSessionDetail(null, true);
+                updateAnalytics();
+                renderHistoryList();
+                if ('vibrate' in navigator) navigator.vibrate([10, 50, 10]);
+            }
+        }
+        window.deleteSessionFromDetail = deleteSessionFromDetail;
+
+        function deleteSessionFromEdit() {
+            if (tempEditSessionIndex === null || tempEditSessionIndex < 0 || tempEditSessionIndex >= boulderHistory.length) return;
+            if (confirm("Are you sure you want to delete this entire session? This cannot be undone.")) {
+                boulderHistory.splice(tempEditSessionIndex, 1);
+                localStorage.setItem('boulderHistory', JSON.stringify(boulderHistory));
+                closeEditSession();
+                closeSessionDetail(null, true);
+                updateAnalytics();
+                renderHistoryList();
+                if ('vibrate' in navigator) navigator.vibrate([10, 50, 10]);
+            }
+        }
+        window.deleteSessionFromEdit = deleteSessionFromEdit;
 
         // -- SESSION EDITOR LOGIC --
         let tempEditSession = null;
@@ -1119,8 +1430,10 @@
             const scoreEl = document.getElementById('editSessionScoreDisplay');
             if (!listEl || !tempEditSession) return;
 
-            // Calculate current total score of remaining climbs
-            const currentScore = tempEditSession.climbs.reduce((sum, c) => sum + (c.points || 0), 0);
+            // Calculate current total score of remaining climbs and workouts
+            const climbScore = (tempEditSession.climbs || []).reduce((sum, c) => sum + (c.points || 0), 0);
+            const workoutScore = (tempEditSession.workouts || []).reduce((acc, w) => acc + (w.exercises || []).reduce((eAcc, ex) => eAcc + ((ex.completedSets || 0) * 10), 0), 0);
+            const currentScore = climbScore + workoutScore;
             tempEditSession.score = currentScore;
             scoreEl.innerText = `${currentScore.toLocaleString()} pts`;
 
@@ -1977,6 +2290,32 @@
             const selectEl = document.getElementById('strengthExerciseSelect');
             if (selectEl && selectEl.value !== exerciseId) {
                 selectEl.value = exerciseId;
+            }
+
+            // Check if user has 0 logged strength sessions across all exercises
+            let totalStrengthSessionsAll = 0;
+            (boulderHistory || []).forEach(s => {
+                (s.workouts || []).forEach(w => {
+                    (w.exercises || []).forEach(ex => {
+                        if (ex.sets && ex.sets.length > 0 && ex.sets.some(st => ((st.reps || 0) > 0 || (st.weight || 0) > 0))) {
+                            totalStrengthSessionsAll++;
+                        }
+                    });
+                });
+            });
+
+            const emptyStateEl = document.getElementById('strengthEmptyState');
+            const chartContEl = document.getElementById('strengthChartContainer');
+            const histContEl = document.getElementById('strengthHistoryContainer');
+
+            if (totalStrengthSessionsAll === 0) {
+                if (emptyStateEl) emptyStateEl.classList.remove('hidden');
+                if (chartContEl) chartContEl.classList.add('hidden');
+                if (histContEl) histContEl.classList.add('hidden');
+            } else {
+                if (emptyStateEl) emptyStateEl.classList.add('hidden');
+                if (chartContEl) chartContEl.classList.remove('hidden');
+                if (histContEl) histContEl.classList.remove('hidden');
             }
 
             const data = getExerciseHistory(exerciseId);

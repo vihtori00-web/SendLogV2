@@ -364,32 +364,18 @@
                 <!-- SUB-VIEW 1: SESSIONS VIEW (Primary, Front and Center) -->
                 <div id="historyViewSessions" class="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5 pt-3">
                     <!-- Hero Summary Banner with High Density Stats -->
-                    <div id="historyHeroBanner" class="bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 border border-neutral-800 rounded-2xl p-3.5 mb-3 flex flex-col gap-3 shadow-sm">
-                        <div class="flex items-center justify-between gap-2">
-                            <div class="flex items-center gap-2.5 min-w-0">
-                                <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-base shrink-0">🧗</div>
-                                <div class="min-w-0">
-                                    <p id="historyHeroTitle" class="text-xs font-black text-white truncate">Session Activity</p>
-                                    <p id="historyHeroSubtitle" class="text-[10px] text-neutral-400 truncate">Total volume & progress</p>
-                                </div>
-                            </div>
-                            <!-- Type Filter Pill -->
-                            <div class="flex bg-neutral-950 rounded-lg p-0.5 border border-neutral-800 text-[9px] font-black shrink-0">
-                                <button onclick="filterHistoryType('all')" id="hfTypeAll" class="px-2 py-1 rounded bg-emerald-500 text-black">ALL</button>
-                                <button onclick="filterHistoryType('climbs')" id="hfTypeClimbs" class="px-2 py-1 rounded text-neutral-400 hover:text-white">CLIMBS</button>
-                                <button onclick="filterHistoryType('workouts')" id="hfTypeWorkouts" class="px-2 py-1 rounded text-neutral-400 hover:text-white">WORKOUTS</button>
-                            </div>
-                        </div>
-
+                    <div id="historyHeroBanner" class="bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 border border-neutral-800 rounded-2xl p-3 mb-3 shadow-sm">
                         <!-- 5-Metric High-Density Strip: Flash %, Sends, Max Grade, Time, Sessions -->
-                        <div class="grid grid-cols-5 gap-1.5 pt-2.5 border-t border-neutral-800/80 text-center">
+                        <div class="grid grid-cols-5 gap-1.5 text-center">
                             <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
                                 <span id="heroStatFlash" class="text-xs sm:text-sm font-black text-amber-400 leading-tight">--%</span>
                                 <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Flash %</span>
+                                <span id="statFlashRateDelta" class="text-[8px] font-bold hidden"></span>
                             </div>
                             <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
                                 <span id="heroStatSends" class="text-xs sm:text-sm font-black text-emerald-400 leading-tight">--</span>
                                 <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Sends</span>
+                                <span id="statAvgSendsDelta" class="text-[8px] font-bold hidden"></span>
                             </div>
                             <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
                                 <span id="heroStatMaxGrade" class="text-xs sm:text-sm font-black text-blue-400 leading-tight">--</span>
@@ -402,8 +388,31 @@
                             <div class="bg-neutral-950/70 border border-neutral-800/60 rounded-xl py-1.5 px-1 flex flex-col items-center justify-center">
                                 <span id="heroStatSessions" class="text-xs sm:text-sm font-black text-neutral-200 leading-tight">--</span>
                                 <span class="text-[7.5px] uppercase font-black tracking-wider text-neutral-500 mt-0.5">Sessions</span>
+                                <span id="statTotalPointsDelta" class="text-[8px] font-bold hidden"></span>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Quick-Filter Chips Bar (Type & Style Tags) -->
+                    <div id="historyQuickFilters" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 mb-3">
+                        <!-- Type Chips -->
+                        <button onclick="filterHistoryType('all')" id="hfTypeAll" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm">All</button>
+                        <button onclick="filterHistoryType('climbs')" id="hfTypeClimbs" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🧗 Climbs</button>
+                        <button onclick="filterHistoryType('workouts')" id="hfTypeWorkouts" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">💪 Workouts</button>
+                        <button onclick="filterHistoryType('projects')" id="hfTypeProjects" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">🎯 Projects Only</button>
+
+                        <div class="w-px h-5 bg-neutral-800 shrink-0 mx-0.5"></div>
+
+                        <!-- Style Tag Filter Chips -->
+                        <button onclick="filterHistoryStyle('all')" id="hfStyle_all" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-emerald-500 text-black shadow-sm">All Styles</button>
+                        <button onclick="filterHistoryStyle('crimp')" id="hfStyle_crimp" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Crimp</button>
+                        <button onclick="filterHistoryStyle('sloper')" id="hfStyle_sloper" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Sloper</button>
+                        <button onclick="filterHistoryStyle('pinch')" id="hfStyle_pinch" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Pinch</button>
+                        <button onclick="filterHistoryStyle('slab')" id="hfStyle_slab" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Slab</button>
+                        <button onclick="filterHistoryStyle('dyno')" id="hfStyle_dyno" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Dyno</button>
+                        <button onclick="filterHistoryStyle('board')" id="hfStyle_board" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Board</button>
+                        <button onclick="filterHistoryStyle('technical')" id="hfStyle_technical" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Technical</button>
+                        <button onclick="filterHistoryStyle('powerful')" id="hfStyle_powerful" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white">Powerful</button>
                     </div>
 
                     <!-- Chronological Session Cards List -->
@@ -456,6 +465,7 @@
                                     </button>
                                     <div id="secondarySelDropdown" class="hidden absolute right-0 top-full mt-1.5 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1 min-w-[110px] z-50 text-[9px] font-black uppercase tracking-wider divide-y divide-neutral-800/40">
                                         <button onclick="selectChartMetric('secondary', 'none')" class="w-full text-left px-3 py-2 text-neutral-500 hover:bg-neutral-800/60 transition-colors">None</button>
+                                        <button onclick="selectChartMetric('secondary', 'load')" class="w-full text-left px-3 py-2 text-amber-400 hover:bg-neutral-800/60 transition-colors">🔥 Load (TL)</button>
                                         <button onclick="selectChartMetric('secondary', 'max_grade')" class="w-full text-left px-3 py-2 text-blue-400 hover:bg-neutral-800/60 transition-colors">Max Grade</button>
                                         <button onclick="selectChartMetric('secondary', 'avg_grade')" class="w-full text-left px-3 py-2 text-purple-400 hover:bg-neutral-800/60 transition-colors">Avg Grade</button>
                                         <button onclick="selectChartMetric('secondary', 'flash_pct')" class="w-full text-left px-3 py-2 text-amber-400 hover:bg-neutral-800/60 transition-colors">Flash %</button>
@@ -471,6 +481,7 @@
                         <!-- 1-Tap Primary Metric Selector Chips Bar -->
                         <div id="chartMetricChipsRow" class="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-neutral-800/80">
                             <div id="chartMetricChipsContainer" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                                <button onclick="setTrendMetric('load')" id="chipMetric_load" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">🔥 Load</button>
                                 <button onclick="setTrendMetric('max_grade')" id="chipMetric_max_grade" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap bg-blue-500 text-black shadow-sm">🧗 Max Grade</button>
                                 <button onclick="setTrendMetric('avg_grade')" id="chipMetric_avg_grade" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">📊 Avg Grade</button>
                                 <button onclick="setTrendMetric('flash_pct')" id="chipMetric_flash_pct" class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap text-neutral-400 hover:text-white bg-neutral-950 border border-neutral-800">⚡ Flash %</button>
@@ -487,6 +498,18 @@
                         <!-- Canvas -->
                         <div class="w-full h-64 cursor-pointer">
                             <canvas id="progressionChart" class="w-full h-full"></canvas>
+                        </div>
+
+                        <!-- Radar Style Summary Strip (Visible in Radar Mode) -->
+                        <div id="radarStyleSummary" class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-neutral-800/80 hidden">
+                            <div class="bg-neutral-950/70 border border-emerald-500/20 rounded-xl p-2.5">
+                                <span class="text-[8.5px] uppercase font-black tracking-wider text-emerald-400 block mb-1">💪 Strongest Styles</span>
+                                <div id="radarStrongStyles" class="text-[10px] font-bold text-neutral-200 space-y-0.5">--</div>
+                            </div>
+                            <div class="bg-neutral-950/70 border border-amber-500/20 rounded-xl p-2.5">
+                                <span class="text-[8.5px] uppercase font-black tracking-wider text-amber-400 block mb-1">🧭 Anti-Styles to Train</span>
+                                <div id="radarWeakStyles" class="text-[10px] font-bold text-neutral-200 space-y-0.5">--</div>
+                            </div>
                         </div>
                     </div>
 
@@ -529,13 +552,19 @@
                             </div>
                         </div>
 
-                        <!-- Strength Progression Line Chart -->
-                        <div class="w-full h-44 cursor-pointer pt-1">
+                        <!-- Compact Empty State for 0 Strength Workouts -->
+                        <div id="strengthEmptyState" class="hidden py-4 px-3 text-center bg-neutral-950/60 rounded-xl border border-neutral-800/80">
+                            <p class="text-xs text-neutral-300 font-bold">No Strength Workouts Logged Yet</p>
+                            <p class="text-[10px] text-neutral-500 mt-0.5">Complete workouts in the Session tab to track weight & 1RM progression</p>
+                        </div>
+
+                        <!-- Strength Progression Line Chart Container -->
+                        <div id="strengthChartContainer" class="w-full h-44 cursor-pointer pt-1">
                             <canvas id="strengthProgressionChart" class="w-full h-full"></canvas>
                         </div>
 
-                        <!-- Recent Sets History Breakdown -->
-                        <div class="pt-2 border-t border-neutral-800">
+                        <!-- Recent Sets History Breakdown Container -->
+                        <div id="strengthHistoryContainer" class="pt-2 border-t border-neutral-800">
                             <p class="text-[9px] font-black uppercase tracking-widest text-neutral-500 mb-2">Past Logged Sets</p>
                             <div id="strengthSessionHistoryList" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                                 <p class="text-neutral-500 text-center py-3 text-xs">No strength workouts logged yet.</p>
@@ -1141,6 +1170,12 @@
                             </svg>
                             EDIT
                         </button>
+                        <button onclick="deleteSessionFromDetail()" class="text-red-400 hover:text-red-300 transition active:scale-95 bg-neutral-800 hover:bg-red-500/20 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border border-red-500/20" title="Delete Session">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            DELETE
+                        </button>
                         <button onclick="closeSessionDetail()" class="text-neutral-500 hover:text-white transition active:scale-95 bg-neutral-800 p-2 rounded-full">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
@@ -1244,6 +1279,10 @@
                     Save Changes
                 </button>
             </div>
+            <button onclick="deleteSessionFromEdit()" class="w-full mt-3 py-3.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-2xl text-xs font-black uppercase tracking-wider transition active:scale-95 flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Delete This Entire Session
+            </button>
         </div>
     </div>
 

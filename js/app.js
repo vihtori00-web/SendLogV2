@@ -125,7 +125,49 @@
             }
         }
 
+        function sanitizeHistoryData(history) {
+            if (!Array.isArray(history)) return history;
+            let modified = false;
+            history.forEach(s => {
+                if (s && typeof s.duration === 'number' && s.duration > 18000) {
+                    const climbTimes = [];
+                    (s.climbs || []).forEach(c => {
+                        if (c.timestamp && typeof c.timestamp === 'number') {
+                            climbTimes.push(c.timestamp / 1000);
+                        } else if (c.time && typeof c.time === 'string' && c.time.includes(':')) {
+                            const parts = c.time.split(':').map(Number);
+                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                                climbTimes.push(parts[0] * 3600 + parts[1] * 60);
+                            }
+                        }
+                    });
+
+                    if (climbTimes.length >= 2) {
+                        climbTimes.sort((a, b) => a - b);
+                        const span = climbTimes[climbTimes.length - 1] - climbTimes[0];
+                        const newDur = Math.min(18000, Math.max(1800, Math.round(span + 900)));
+                        s.duration = newDur;
+                        modified = true;
+                    } else {
+                        s.duration = 3600;
+                        modified = true;
+                    }
+                }
+            });
+
+            if (modified) {
+                try {
+                    localStorage.setItem('boulderHistory', JSON.stringify(history));
+                } catch (e) {
+                    console.error('Failed to save sanitized boulderHistory:', e);
+                }
+            }
+            return history;
+        }
+        window.sanitizeHistoryData = sanitizeHistoryData;
+
         let boulderHistory = safeJsonParse(localStorage.getItem('boulderHistory'), []);
+        boulderHistory = sanitizeHistoryData(boulderHistory);
         let maxGradeIndex = resolveMaxGradeIndex(boulderHistory);
         let currentGradeIndex = maxGradeIndex;
         let tries = 1;
@@ -293,20 +335,28 @@
         }
 
         let heatmapCurrentMonthOffset = 0; // 0 is current month, -1 is last month, etc.
+        const heatmapDayData = {};
+        let heatmapCycleState = { dateStr: null, cycleIndex: 0 };
 
         function renderCalendarHeatmap() {
             const container = document.getElementById('heatmapGrid');
             const label = document.getElementById('heatmapMonthLabel');
             if (!container || !label) return;
 
-            // Gather climb counts per day
-            const dateCounts = {};
-            boulderHistory.forEach(s => {
-                if (s.timestamp) {
-                    const d = new Date(s.timestamp);
-                    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                    dateCounts[key] = (dateCounts[key] || 0) + (s.climbs || []).length;
+            // Gather climb counts, workout counts, and session indices per day
+            Object.keys(heatmapDayData).forEach(k => delete heatmapDayData[k]);
+            boulderHistory.forEach((s, idx) => {
+                let d;
+                if (s.timestamp && typeof s.timestamp === 'number') d = new Date(s.timestamp);
+                else if (s.date) d = new Date(s.date);
+                if (!d || isNaN(d.getTime())) return;
+                const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                if (!heatmapDayData[key]) {
+                    heatmapDayData[key] = { climbCount: 0, workoutCount: 0, sessionIndices: [] };
                 }
+                heatmapDayData[key].climbCount += (s.climbs || []).length;
+                heatmapDayData[key].workoutCount += (s.workouts || []).length;
+                heatmapDayData[key].sessionIndices.push(idx);
             });
 
             const today = new Date();
@@ -340,7 +390,10 @@
             for (let day = 1; day <= daysInMonth; day++) {
                 const cellDate = new Date(year, month, day);
                 const key = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                const count = dateCounts[key] || 0;
+                const dInfo = heatmapDayData[key] || { climbCount: 0, workoutCount: 0, sessionIndices: [] };
+                const count = dInfo.climbCount;
+                const wCount = dInfo.workoutCount;
+                const sessCount = dInfo.sessionIndices.length;
                 const isFuture = cellDate > today;
 
                 let bg = 'bg-neutral-800/40 border border-neutral-800/50';
@@ -349,6 +402,9 @@
                 if (isFuture) {
                     bg = 'bg-transparent border border-dashed border-neutral-800/30';
                     txt = 'text-neutral-700/50';
+                } else if (count === 0 && wCount > 0) {
+                    bg = 'bg-cyan-500/30 border-cyan-400/50 text-cyan-200';
+                    txt = 'text-cyan-200 font-bold';
                 } else if (count >= 7) {
                     bg = 'bg-emerald-400 border border-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.3)]';
                     txt = 'text-black font-black';
@@ -362,18 +418,25 @@
 
                 // Highlight today specifically if it's the current month
                 const isToday = cellDate.getTime() === today.getTime();
-                if (isToday && count === 0) {
+                if (isToday && sessCount === 0) {
                      bg += ' border-neutral-500/50 ring-1 ring-neutral-500/50';
                 }
 
                 let actionAttr = '';
-                let cursorClass = count > 0 ? 'cursor-pointer active:scale-95' : 'pointer-events-none';
-                if (count > 0) {
+                let cursorClass = sessCount > 0 ? 'cursor-pointer active:scale-95' : 'pointer-events-none';
+                if (sessCount > 0) {
                     actionAttr = `onclick="openHeatmapSession('${key}')"`;
                 }
 
-                html += `<div ${actionAttr} class="aspect-square rounded-md ${bg} flex items-center justify-center text-[10px] ${txt} transition-all relative overflow-hidden ${cursorClass}" title="${key}: ${count} climbs">
+                const multiBadge = sessCount > 1 
+                    ? `<span class="absolute top-0.5 right-0.5 text-[7px] font-black leading-none px-1 py-0.5 rounded bg-black/75 text-emerald-300 border border-emerald-500/30 shadow-xs">×${sessCount}</span>` 
+                    : '';
+
+                const tooltip = sessCount > 0 ? `${key}: ${count} climbs, ${wCount} workouts (${sessCount} session${sessCount > 1 ? 's' : ''})` : key;
+
+                html += `<div ${actionAttr} class="aspect-square rounded-md ${bg} flex items-center justify-center text-[10px] ${txt} transition-all relative overflow-hidden ${cursorClass}" title="${tooltip}">
                             <span class="z-10">${day}</span>
+                            ${multiBadge}
                             ${count > 0 ? `<div class="absolute bottom-0 left-0 right-0 h-1 bg-black/10"></div>` : ''}
                          </div>`;
             }
@@ -401,17 +464,22 @@
         }
 
         function openHeatmapSession(dateStr) {
-            // Find the most recent session for this specific date
-            for (let i = boulderHistory.length - 1; i >= 0; i--) {
-                const s = boulderHistory[i];
-                if (s.timestamp) {
-                    const d = new Date(s.timestamp);
-                    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                    if (key === dateStr) {
-                        openSessionDetail(i, true);
-                        return;
-                    }
-                }
+            const dInfo = heatmapDayData[dateStr];
+            if (!dInfo || !dInfo.sessionIndices || dInfo.sessionIndices.length === 0) return;
+
+            // Sort descending so the most recent session is opened first
+            const indices = [...dInfo.sessionIndices].reverse();
+
+            if (heatmapCycleState.dateStr === dateStr) {
+                heatmapCycleState.cycleIndex = (heatmapCycleState.cycleIndex + 1) % indices.length;
+            } else {
+                heatmapCycleState.dateStr = dateStr;
+                heatmapCycleState.cycleIndex = 0;
+            }
+
+            const targetIdx = indices[heatmapCycleState.cycleIndex];
+            if (typeof openSessionDetail === 'function') {
+                openSessionDetail(targetIdx, true);
             }
         }
 
@@ -459,6 +527,9 @@
             showDelta('statAvgSendsDelta', parseFloat(current.avgSends), parseFloat(prev.avgSends));
             showDelta('statTotalPointsDelta', current.totalPoints, prev.totalPoints);
         }
+        window.updateComparisonDeltas = updateComparisonDeltas;
+        window.renderCalendarHeatmap = renderCalendarHeatmap;
+        window.openHeatmapSession = openHeatmapSession;
 
         function renderTags() {
             try {
